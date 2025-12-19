@@ -4,6 +4,7 @@ import '../models/word_model.dart';
 import '../models/module_model.dart';
 import '../models/user_model.dart';
 import '../models/progress_model.dart';
+import '../models/evaluation_model.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -23,8 +24,9 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,  // ← VERSION 2 (incrementado)
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,  // ← AGREGAR ESTO
     );
   }
 
@@ -80,8 +82,42 @@ class DatabaseHelper {
       )
     ''');
 
+    await db.execute('''
+    CREATE TABLE evaluations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      module_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      correct_answers INTEGER NOT NULL,
+      total_questions INTEGER NOT NULL,
+      percentage REAL NOT NULL,
+      completed_at TEXT NOT NULL,
+      FOREIGN KEY (module_id) REFERENCES modules (id),
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+  ''');
+
     // Poblar con datos iniciales
     await _populateInitialData(db);
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Migración de versión 1 a 2: Agregar tabla evaluations
+      await db.execute('''
+        CREATE TABLE evaluations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          module_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          correct_answers INTEGER NOT NULL,
+          total_questions INTEGER NOT NULL,
+          percentage REAL NOT NULL,
+          completed_at TEXT NOT NULL,
+          FOREIGN KEY (module_id) REFERENCES modules (id),
+          FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+      ''');
+      print('📊 Tabla evaluations creada (migración v1→v2)');
+    }
   }
 
   Future<void> _populateInitialData(Database db) async {
@@ -195,6 +231,42 @@ class DatabaseHelper {
     final db = await database;
     final result = await db.query('modules', orderBy: 'order_index');
     return result.map((map) => ModuleModel.fromMap(map)).toList();
+  }
+
+  // CRUD de Evaluaciones
+  Future<int> insertEvaluation(EvaluationModel evaluation) async {
+    final db = await database;
+    return await db.insert('evaluations', evaluation.toMap());
+  }
+
+  Future<List<EvaluationModel>> getEvaluationsByModule(int moduleId) async {
+    final db = await database;
+    final result = await db.query(
+      'evaluations',
+      where: 'module_id = ?',
+      whereArgs: [moduleId],
+      orderBy: 'completed_at DESC',
+    );
+    return result.map((map) => EvaluationModel.fromMap(map)).toList();
+  }
+
+  Future<List<EvaluationModel>> getAllEvaluations() async {
+    final db = await database;
+    final result = await db.query('evaluations', orderBy: 'completed_at DESC');
+    return result.map((map) => EvaluationModel.fromMap(map)).toList();
+  }
+
+  Future<EvaluationModel?> getLastEvaluation(int moduleId) async {
+    final db = await database;
+    final result = await db.query(
+      'evaluations',
+      where: 'module_id = ?',
+      whereArgs: [moduleId],
+      orderBy: 'completed_at DESC',
+      limit: 1,
+    );
+    if (result.isEmpty) return null;
+    return EvaluationModel.fromMap(result.first);
   }
 
   // Cerrar base de datos

@@ -6,6 +6,7 @@ import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/word_model.dart';
 import '../../../data/models/module_model.dart';
 import 'lesson_screen.dart';
+import '../evaluation/evaluation_screen.dart';
 
 class ModuleScreen extends StatefulWidget {
   final ModuleModel module;
@@ -69,6 +70,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.quiz),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EvaluationScreen(
+                    module: widget.module,
+                  ),
+                ),
+              );
+            },
+            tooltip: 'Iniciar Evaluación',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
