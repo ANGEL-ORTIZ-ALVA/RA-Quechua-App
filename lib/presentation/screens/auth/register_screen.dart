@@ -14,13 +14,6 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
-  String _selectedLevel = 'Principiante';
-
-  final List<String> _levels = [
-    'Principiante',
-    'Intermedio',
-    'Avanzado',
-  ];
 
   @override
   void dispose() {
@@ -32,8 +25,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_name', _nameController.text);
-      await prefs.setString('user_level', _selectedLevel);
+      await prefs.setString('user_level', 'Principiante'); // Nivel fijo inicial
       await prefs.setBool('is_registered', true);
+      await prefs.setInt('words_learned', 0); // Contador de progreso
 
       if (mounted) {
         Navigator.pushReplacementNamed(context, AppRoutes.home);
@@ -68,7 +62,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Cuéntanos un poco sobre ti',
+                  'Cuéntanos cómo te llamas para personalizar tu experiencia',
                   style: AppTextStyles.bodyLarge.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -83,6 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _nameController,
+                  textCapitalization: TextCapitalization.words,
                   decoration: InputDecoration(
                     hintText: 'Tu nombre',
                     filled: true,
@@ -108,14 +103,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Selector de nivel
-                Text(
-                  '¿Cuál es tu nivel de quechua?',
-                  style: AppTextStyles.h3,
+                // Info sobre progresión
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.info.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: AppColors.info,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Comenzarás en nivel Principiante y avanzarás automáticamente según tu progreso',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 12),
-
-                ...(_levels.map((level) => _buildLevelOption(level))),
 
                 const SizedBox(height: 48),
 
@@ -143,82 +160,5 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ),
     );
-  }
-
-  Widget _buildLevelOption(String level) {
-    final isSelected = _selectedLevel == level;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedLevel = level;
-        });
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                  width: 2,
-                ),
-                color: isSelected ? AppColors.primary : Colors.transparent,
-              ),
-              child: isSelected
-                  ? const Icon(
-                      Icons.check,
-                      size: 16,
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  level,
-                  style: AppTextStyles.bodyLarge.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  _getLevelDescription(level),
-                  style: AppTextStyles.bodySmall,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getLevelDescription(String level) {
-    switch (level) {
-      case 'Principiante':
-        return 'Estoy comenzando desde cero';
-      case 'Intermedio':
-        return 'Conozco algunas palabras básicas';
-      case 'Avanzado':
-        return 'Tengo conocimientos previos';
-      default:
-        return '';
-    }
   }
 }

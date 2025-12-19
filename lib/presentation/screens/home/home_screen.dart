@@ -5,6 +5,7 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/module_model.dart';
+import '../modules/module_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -232,7 +233,12 @@ class _HomeScreenState extends State<HomeScreen> {
           color: color,
           progress: 0.0,
           onTap: () {
-            _showComingSoon(context, module.name);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ModuleScreen(module: module),
+              ),
+            );
           },
         ),
       );
