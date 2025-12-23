@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "57230695232",
+    "project_id": "ra-quechua-app",
+    "storage_bucket": "ra-quechua-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:57230695232:android:66d614654d3fc36539f8a5",
+        "android_client_info": {
+          "package_name": "com.quechua.app.ra_quechua_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBw99Oq_jf0jgrEiBO_5G5cTn3FzdY9sq4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
