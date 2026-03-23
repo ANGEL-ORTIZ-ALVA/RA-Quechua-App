@@ -50,7 +50,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
+        backgroundColor: _getModuleColor(),  // ← DINÁMICO POR MÓDULO
         foregroundColor: AppColors.textLight,
         elevation: 0,
         title: Column(
@@ -70,22 +70,6 @@ class _ModuleScreenState extends State<ModuleScreen> {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.quiz),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => EvaluationScreen(
-                    module: widget.module,
-                  ),
-                ),
-              );
-            },
-            tooltip: 'Iniciar Evaluación',
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -96,7 +80,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
           _buildHeader(),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // ← Espacio para botón flotante
               itemCount: _words.length,
               itemBuilder: (context, index) {
                 return _buildWordCard(_words[index], index);
@@ -105,6 +89,11 @@ class _ModuleScreenState extends State<ModuleScreen> {
           ),
         ],
       ),
+      // ← NUEVO: Botón flotante GRANDE de evaluación
+      floatingActionButton: _isLoading || _words.isEmpty
+          ? null
+          : _buildEvaluationButton(context),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -113,10 +102,10 @@ class _ModuleScreenState extends State<ModuleScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        color: _getModuleColor(),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: _getModuleColor().withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -159,6 +148,86 @@ class _ModuleScreenState extends State<ModuleScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ← NUEVO: Botón flotante de evaluación MUY VISIBLE
+  Widget _buildEvaluationButton(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      width: double.infinity,
+      height: 64,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _getModuleColor(),
+            _getModuleColor().withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: _getModuleColor().withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => EvaluationScreen(
+                  module: widget.module,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.quiz,
+                  color: AppColors.textLight,
+                  size: 28,
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '¿Listo para la evaluación?',
+                      style: AppTextStyles.bodyLarge.copyWith(
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Pon a prueba lo que aprendiste',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textLight.withOpacity(0.9),
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Icon(
+                  Icons.arrow_forward,
+                  color: AppColors.textLight,
+                  size: 24,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

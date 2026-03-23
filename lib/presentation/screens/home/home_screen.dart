@@ -19,6 +19,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userLevel = '';
   List<ModuleModel> _modules = [];
   bool _isLoading = true;
+  int _totalLearnedWords = 0;
+  Map<int, int> _moduleProgress = {}; // moduleId -> palabras aprendidas
 
   @override
   void initState() {
@@ -29,6 +31,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     await _loadUserData();
     await _loadModules();
+    await _loadProgress();
   }
 
   Future<void> _loadUserData() async {
@@ -44,14 +47,38 @@ class _HomeScreenState extends State<HomeScreen> {
       final modules = await DatabaseHelper.instance.getAllModules();
       setState(() {
         _modules = modules;
-        _isLoading = false;
       });
     } catch (e) {
       print('Error loading modules: $e');
+    }
+  }
+
+  Future<void> _loadProgress() async {
+    try {
+      int total = 0;
+      Map<int, int> moduleProgressMap = {};
+
+      for (var module in _modules) {
+        final learned = await DatabaseHelper.instance.getLearnedWordsCount(module.id!);
+        moduleProgressMap[module.id!] = learned;
+        total += learned;
+      }
+
+      setState(() {
+        _totalLearnedWords = total;
+        _moduleProgress = moduleProgressMap;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading progress: $e');
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _refreshProgress() async {
+    await _loadProgress();
   }
 
   @override
@@ -61,23 +88,27 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 32),
-                _buildProgressCard(),
-                const SizedBox(height: 32),
-                Text(
-                  'Módulos de Aprendizaje',
-                  style: AppTextStyles.h2,
-                ),
-                const SizedBox(height: 16),
-                ..._buildModuleCards(),
-              ],
+            : RefreshIndicator(
+          onRefresh: _refreshProgress,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 32),
+                  _buildProgressCard(),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Módulos de Aprendizaje',
+                    style: AppTextStyles.h2,
+                  ),
+                  const SizedBox(height: 16),
+                  ..._buildModuleCards(),
+                ],
+              ),
             ),
           ),
         ),
@@ -132,6 +163,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildProgressCard() {
+    final progressPercentage = _totalLearnedWords / 30;
+    final progressMessage = _totalLearnedWords == 0
+        ? '¡Comienza tu viaje de aprendizaje!'
+        : _totalLearnedWords < 15
+        ? '¡Vas muy bien! Sigue aprendiendo'
+        : _totalLearnedWords < 30
+        ? '¡Estás cerca de completar el nivel!'
+        : '¡Felicidades! Has completado todas las palabras';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -175,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '0/30',
+                  '$_totalLearnedWords/30',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.textLight,
                     fontWeight: FontWeight.bold,
@@ -188,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: 0.0,
+              value: progressPercentage,
               backgroundColor: Colors.white.withOpacity(0.3),
               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
               minHeight: 8,
@@ -196,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            '¡Comienza tu viaje de aprendizaje!',
+            progressMessage,
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textLight.withOpacity(0.9),
             ),
@@ -225,20 +265,28 @@ class _HomeScreenState extends State<HomeScreen> {
       final color = colors[index % colors.length];
       final icon = icons[index % icons.length];
 
+      // Obtener palabras aprendidas de este módulo
+      final learnedWords = _moduleProgress[module.id] ?? 0;
+      final progress = learnedWords / 10.0; // 10 palabras por módulo
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
         child: _buildModuleCard(
           module: module,
           icon: icon,
           color: color,
-          progress: 0.0,
-          onTap: () {
-            Navigator.push(
+          progress: progress,
+          learnedWords: learnedWords,
+          onTap: () async {
+            // Navegar al módulo y esperar a que regrese
+            await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => ModuleScreen(module: module),
               ),
             );
+            // Recargar progreso al regresar
+            _refreshProgress();
           },
         ),
       );
@@ -250,6 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icon,
     required Color color,
     required double progress,
+    required int learnedWords,
     required VoidCallback onTap,
   }) {
     return InkWell(
@@ -307,7 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '10 palabras',
+                        '$learnedWords/10 palabras',
                         style: AppTextStyles.bodySmall,
                       ),
                     ],

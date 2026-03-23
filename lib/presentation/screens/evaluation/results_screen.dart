@@ -3,15 +3,20 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../data/models/evaluation_model.dart';
 import '../../../data/models/module_model.dart';
+import '../../../data/models/question_model.dart';
+import 'evaluation_screen.dart';
+import '../modules/module_screen.dart';  // ← AGREGAR ESTO
 
 class ResultsScreen extends StatelessWidget {
   final EvaluationModel evaluation;
   final ModuleModel module;
+  final List<QuestionModel> questions; // ← NUEVO
 
   const ResultsScreen({
     super.key,
     required this.evaluation,
     required this.module,
+    required this.questions, // ← NUEVO
   });
 
   @override
@@ -37,6 +42,8 @@ class ResultsScreen extends StatelessWidget {
             _buildScoreCard(context),
             const SizedBox(height: 24),
             _buildDetailsCard(context),
+            const SizedBox(height: 24),
+            _buildQuestionsReview(context), // ← NUEVO
             const SizedBox(height: 24),
             _buildFeedbackCard(context),
             const SizedBox(height: 32),
@@ -219,6 +226,149 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
+  // ← NUEVO: Mostrar revisión de preguntas
+  Widget _buildQuestionsReview(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Revisión de Respuestas',
+            style: AppTextStyles.h3,
+          ),
+          const SizedBox(height: 16),
+          ...questions.asMap().entries.map((entry) {
+            final index = entry.key;
+            final question = entry.value;
+            final isCorrect = question.isCorrect;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: isCorrect ? AppColors.success : AppColors.error,
+                    width: 2,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: isCorrect
+                                  ? AppColors.success
+                                  : AppColors.error,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isCorrect ? Icons.check : Icons.close,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Pregunta ${index + 1}',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Palabra en Quechua
+                      Text(
+                        question.correctWord.wordQuechua,
+                        style: AppTextStyles.h3.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        question.correctWord.phonetic,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      // Respuesta del usuario
+                      if (question.selectedAnswer != null) ...[
+                        Row(
+                          children: [
+                            Icon(
+                              isCorrect ? Icons.check_circle : Icons.cancel,
+                              color: isCorrect ? AppColors.success : AppColors.error,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Tu respuesta:',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          question.selectedAnswer!,
+                          style: AppTextStyles.bodyLarge.copyWith(
+                            color: isCorrect ? AppColors.success : AppColors.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                      // Respuesta correcta (siempre mostrar)
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lightbulb_outline,
+                            color: AppColors.success,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Respuesta correcta:',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        question.correctWord.wordSpanish,
+                        style: AppTextStyles.bodyLarge.copyWith(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFeedbackCard(BuildContext context) {
     final feedback = _getFeedbackMessage();
 
@@ -257,17 +407,34 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Widget _buildActions(BuildContext context) {
+    final didPass = evaluation.percentage >= 70;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          // Botón principal (según resultado)
           SizedBox(
             width: double.infinity,
             height: 56,
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
+            child: ElevatedButton.icon(
+                onPressed: didPass
+                    ? () => Navigator.popUntil(context, (route) => route.isFirst)
+                    : () {
+                  // Regresar al módulo específico para repasar
+                  Navigator.popUntil(context, (route) => route.isFirst);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ModuleScreen(module: module),
+                    ),
+                  );
+                },
+              icon: Icon(didPass ? Icons.home : Icons.book),
+              label: Text(
+                didPass ? 'Volver al Inicio' : 'Repasar Palabras',
+                style: AppTextStyles.button,
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.textLight,
@@ -275,23 +442,28 @@ class ResultsScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: Text(
-                'Volver al Inicio',
-                style: AppTextStyles.button,
-              ),
             ),
           ),
           const SizedBox(height: 12),
+
+          // Botón secundario
           SizedBox(
             width: double.infinity,
             height: 56,
             child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                // TODO: Reiniciar evaluación
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('Intentar de Nuevo'),
+              onPressed: didPass
+                  ? () {
+                Navigator.popUntil(context, (route) => route.isFirst);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EvaluationScreen(module: module),
+                  ),
+                );
+              }
+                  : () => Navigator.popUntil(context, (route) => route.isFirst),
+              icon: Icon(didPass ? Icons.refresh : Icons.home),
+              label: Text(didPass ? 'Intentar de Nuevo' : 'Volver al Inicio'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.primary,
                 side: BorderSide(color: AppColors.primary),
@@ -305,7 +477,6 @@ class ResultsScreen extends StatelessWidget {
       ),
     );
   }
-
   Color _getResultColor() {
     if (evaluation.percentage >= 90) return AppColors.success;
     if (evaluation.percentage >= 70) return AppColors.info;

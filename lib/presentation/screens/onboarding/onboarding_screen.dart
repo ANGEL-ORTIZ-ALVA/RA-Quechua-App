@@ -19,7 +19,7 @@ class OnboardingScreen extends StatelessWidget {
               const Spacer(),
               // Ícono principal
               Icon(
-                Icons.school,
+                Icons.terrain,
                 size: 120,
                 color: AppColors.primary,
               ),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../data/models/word_model.dart';
+import '../../../data/datasources/database_helper.dart';
+import '../ar_view/ar_view_screen.dart';
 
 class LessonScreen extends StatefulWidget {
   final WordModel word;
@@ -19,6 +22,107 @@ class LessonScreen extends StatefulWidget {
 
 class _LessonScreenState extends State<LessonScreen> {
   bool _isLearned = false;
+  bool _isLoading = true;
+
+  // Audio
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlayingAudio = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLearnedStatus();
+    _setupAudioListeners();
+  }
+
+  void _setupAudioListeners() {
+    _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
+      if (mounted) {
+        setState(() {
+          _isPlayingAudio = state == PlayerState.playing;
+        });
+      }
+    });
+
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _isPlayingAudio = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadLearnedStatus() async {
+    final isLearned = await DatabaseHelper.instance.isWordLearned(widget.word.id!);
+    setState(() {
+      _isLearned = isLearned;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _toggleLearned() async {
+    final newStatus = !_isLearned;
+
+    setState(() {
+      _isLearned = newStatus;
+    });
+
+    await DatabaseHelper.instance.toggleWordLearned(widget.word.id!, newStatus);
+    _showLearnedFeedback();
+  }
+
+  Future<void> _playAudio() async {
+    final audioUrl = widget.word.audioPath;
+
+    if (audioUrl == null || audioUrl.isEmpty) {
+      _showSnackBar('Audio no disponible para esta palabra', AppColors.warning);
+      return;
+    }
+
+    try {
+      if (_isPlayingAudio) {
+        await _audioPlayer.stop();
+        return;
+      }
+
+      setState(() {
+        _isPlayingAudio = true;
+      });
+
+      await _audioPlayer.play(UrlSource(audioUrl));
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isPlayingAudio = false;
+        });
+        _showSnackBar('Error al reproducir el audio', AppColors.error);
+      }
+    }
+  }
+
+  void _openArView() {
+    // Detener audio si está reproduciendo antes de navegar
+    if (_isPlayingAudio) {
+      _audioPlayer.stop();
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArViewScreen(
+          word: widget.word,
+          moduleColor: widget.moduleColor,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,21 +139,23 @@ class _LessonScreenState extends State<LessonScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              _isLearned ? Icons.check_circle : Icons.check_circle_outline,
-              color: AppColors.textLight,
+          if (!_isLoading)
+            IconButton(
+              icon: Icon(
+                _isLearned ? Icons.check_circle : Icons.check_circle_outline,
+                color: AppColors.textLight,
+              ),
+              onPressed: _toggleLearned,
             ),
-            onPressed: () {
-              setState(() {
-                _isLearned = !_isLearned;
-              });
-              _showLearnedFeedback();
-            },
-          ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: _isLoading
+          ? Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(widget.moduleColor),
+        ),
+      )
+          : SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -58,6 +164,8 @@ class _LessonScreenState extends State<LessonScreen> {
             _buildMainCard(),
             const SizedBox(height: 16),
             _buildPhoneticCard(),
+            const SizedBox(height: 16),
+            _buildLearnedButton(),
             const SizedBox(height: 16),
             _buildActionButtons(),
             const SizedBox(height: 24),
@@ -130,40 +238,64 @@ class _LessonScreenState extends State<LessonScreen> {
               ],
             ),
           ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.image_outlined,
-                  size: 100,
-                  color: widget.moduleColor.withOpacity(0.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Imagen del objeto',
-                  style: AppTextStyles.bodyLarge.copyWith(
-                    color: AppColors.textSecondary,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: widget.word.imagePath != null && widget.word.imagePath!.isNotEmpty
+                ? Image.network(
+              widget.word.imagePath!,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                        loadingProgress.expectedTotalBytes!
+                        : null,
+                    valueColor: AlwaysStoppedAnimation<Color>(widget.moduleColor),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 60,
+                        color: AppColors.error.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error al cargar imagen',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.info.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
+                );
+              },
+            )
+                : Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.image_outlined,
+                    size: 100,
+                    color: widget.moduleColor.withOpacity(0.5),
                   ),
-                  child: Text(
-                    'Disponible en Sprint 2',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.info,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Imagen no disponible',
+                    style: AppTextStyles.bodyLarge.copyWith(
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -209,6 +341,8 @@ class _LessonScreenState extends State<LessonScreen> {
                   ],
                 ),
               ),
+              // Botón de audio en la tarjeta de pronunciación
+              _buildMiniAudioButton(),
             ],
           ),
         ),
@@ -216,20 +350,78 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
+  Widget _buildMiniAudioButton() {
+    final hasAudio = widget.word.audioPath != null && widget.word.audioPath!.isNotEmpty;
+
+    return GestureDetector(
+      onTap: hasAudio ? _playAudio : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: _isPlayingAudio
+              ? widget.moduleColor
+              : widget.moduleColor.withOpacity(0.15),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          _isPlayingAudio ? Icons.stop_rounded : Icons.volume_up_rounded,
+          color: _isPlayingAudio
+              ? AppColors.textLight
+              : widget.moduleColor,
+          size: 24,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLearnedButton() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: ElevatedButton.icon(
+        onPressed: _toggleLearned,
+        icon: Icon(
+          _isLearned ? Icons.check_circle : Icons.check_circle_outline,
+        ),
+        label: Text(_isLearned ? '¡Palabra aprendida!' : 'Marcar como aprendida'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isLearned ? AppColors.success : widget.moduleColor.withOpacity(0.2),
+          foregroundColor: _isLearned ? AppColors.textLight : widget.moduleColor,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: _isLearned ? AppColors.success : widget.moduleColor,
+              width: 2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
+    final hasAudio = widget.word.audioPath != null && widget.word.audioPath!.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
           Expanded(
             child: ElevatedButton.icon(
-              onPressed: () {
-                _showComingSoon('Audio');
-              },
-              icon: const Icon(Icons.volume_up),
-              label: const Text('Escuchar'),
+              onPressed: hasAudio ? _playAudio : null,
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  _isPlayingAudio ? Icons.stop_rounded : Icons.volume_up,
+                  key: ValueKey<bool>(_isPlayingAudio),
+                ),
+              ),
+              label: Text(_isPlayingAudio ? 'Detener' : 'Escuchar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: widget.moduleColor,
+                backgroundColor: _isPlayingAudio
+                    ? AppColors.error.withOpacity(0.9)
+                    : widget.moduleColor,
                 foregroundColor: AppColors.textLight,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -241,9 +433,7 @@ class _LessonScreenState extends State<LessonScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: ElevatedButton.icon(
-              onPressed: () {
-                _showComingSoon('Realidad Aumentada');
-              },
+              onPressed: _openArView,
               icon: const Icon(Icons.view_in_ar),
               label: const Text('Ver en RA'),
               style: ElevatedButton.styleFrom(
@@ -310,7 +500,7 @@ class _LessonScreenState extends State<LessonScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'En el Sprint 3 podrás ver este objeto en realidad aumentada y escuchar su pronunciación auténtica.',
+                    'Presiona "Escuchar" para oír la pronunciación en quechua. Presiona "Ver en RA" para explorar el modelo 3D e interactuar con realidad aumentada.',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textPrimary,
                     ),
@@ -368,28 +558,20 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature - Disponible en Sprint 3'),
-        backgroundColor: AppColors.info,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
+  void _showLearnedFeedback() {
+    _showSnackBar(
+      _isLearned
+          ? '¡Palabra marcada como aprendida!'
+          : 'Desmarcada como aprendida',
+      _isLearned ? AppColors.success : AppColors.info,
     );
   }
 
-  void _showLearnedFeedback() {
+  void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          _isLearned
-              ? '¡Palabra marcada como aprendida!'
-              : 'Marca como aprendida cuando la domines',
-        ),
-        backgroundColor: _isLearned ? AppColors.success : AppColors.info,
+        content: Text(message),
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),

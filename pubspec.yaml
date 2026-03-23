@@ -23,10 +23,11 @@ dependencies:
   path: ^1.8.3
 
   # Realidad Aumentada
-  #ar_flutter_plugin: ^0.7.3
+  # Visor 3D y Realidad Aumentada
+  model_viewer_plus: ^1.8.0
 
   # Audio
-  audioplayers: ^5.2.1
+  audioplayers: ^6.0.0
 
   # UI/UX
   google_fonts: ^6.1.0

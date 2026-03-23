@@ -136,6 +136,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         builder: (context) => ResultsScreen(
           evaluation: evaluation,
           module: widget.module,
+          questions: _questions,
         ),
       ),
     );
@@ -149,6 +150,19 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
       ),
     );
     Navigator.pop(context);
+  }
+
+  Color _getModuleColor() {
+    switch (widget.module.id) {
+      case 1:
+        return AppColors.primary;
+      case 2:
+        return AppColors.secondary;
+      case 3:
+        return AppColors.accent;
+      default:
+        return AppColors.primary;
+    }
   }
 
   @override
@@ -175,7 +189,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.primary,
+        backgroundColor: _getModuleColor(),
         foregroundColor: AppColors.textLight,
         title: Text(
           'Evaluación: ${widget.module.name}',
@@ -210,7 +224,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   Widget _buildProgressBar(double progress) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      color: AppColors.primary,
+      color: _getModuleColor(),
       child: Column(
         children: [
           Row(
@@ -263,7 +277,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             color: isAnswered
                 ? AppColors.success
                 : isCurrent
-                ? AppColors.primary
+                ? _getModuleColor()
                 : AppColors.textSecondary.withOpacity(0.3),
           ),
         );
@@ -285,8 +299,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppColors.primary.withOpacity(0.1),
-              AppColors.primary.withOpacity(0.05),
+              _getModuleColor().withOpacity(0.1),
+              _getModuleColor().withOpacity(0.05),
             ],
           ),
         ),
@@ -303,7 +317,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             Text(
               question.correctWord.wordQuechua,
               style: AppTextStyles.h1.copyWith(
-                color: AppColors.primary,
+                color: _getModuleColor(),
               ),
               textAlign: TextAlign.center,
             ),
@@ -337,11 +351,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primary.withOpacity(0.1)
+                    ? _getModuleColor().withOpacity(0.1)
                     : AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? AppColors.primary : Colors.transparent,
+                  color: isSelected ? _getModuleColor() : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -354,11 +368,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: isSelected
-                            ? AppColors.primary
+                            ? _getModuleColor()
                             : AppColors.textSecondary,
                         width: 2,
                       ),
-                      color: isSelected ? AppColors.primary : Colors.transparent,
+                      color: isSelected ? _getModuleColor() : Colors.transparent,
                     ),
                     child: isSelected
                         ? const Icon(
@@ -375,7 +389,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                       style: AppTextStyles.bodyLarge.copyWith(
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                         color: isSelected
-                            ? AppColors.primary
+                            ? _getModuleColor()
                             : AppColors.textPrimary,
                       ),
                     ),
@@ -396,29 +410,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
     return Column(
       children: [
-        if (canProceed)
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: isLastQuestion ? _finishEvaluation : _nextQuestion,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: AppColors.textLight,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                isLastQuestion ? 'Finalizar Evaluación' : 'Siguiente',
-                style: AppTextStyles.button,
-              ),
-            ),
-          ),
+        // Mensaje si no ha respondido
         if (!canProceed)
           Container(
             width: double.infinity,
-            height: 56,
+            padding: const EdgeInsets.symmetric(vertical: 16),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: AppColors.textSecondary.withOpacity(0.1),
@@ -431,27 +427,60 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               ),
             ),
           ),
-        if (!isFirstQuestion) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: OutlinedButton(
-              onPressed: _previousQuestion,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+
+        // Botones en horizontal
+        if (canProceed) ...[
+          Row(
+            children: [
+              // Botón Anterior (solo si no es la primera)
+              if (!isFirstQuestion)
+                Expanded(
+                  child: SizedBox(
+                    height: 56,
+                    child: OutlinedButton.icon(
+                      onPressed: _previousQuestion,
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('Anterior'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _getModuleColor(),
+                        side: BorderSide(color: _getModuleColor()),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Espaciado entre botones
+              if (!isFirstQuestion) const SizedBox(width: 12),
+
+              // Botón Siguiente/Finalizar
+              Expanded(
+                flex: isFirstQuestion ? 1 : 1,
+                child: SizedBox(
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: isLastQuestion ? _finishEvaluation : _nextQuestion,
+                    icon: Icon(isLastQuestion ? Icons.check : Icons.arrow_forward),
+                    label: Text(
+                      isLastQuestion ? 'Finalizar' : 'Siguiente',
+                      style: AppTextStyles.button,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _getModuleColor(),
+                      foregroundColor: AppColors.textLight,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              child: const Text('Anterior'),
-            ),
+            ],
           ),
         ],
       ],
     );
   }
 }
-
-// Continúa en el siguiente mensaje...
