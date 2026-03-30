@@ -24,9 +24,14 @@ class _LessonScreenState extends State<LessonScreen> {
   bool _isLearned = false;
   bool _isLoading = true;
 
-  // Audio
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlayingAudio = false;
+
+  bool get _hasModel3D =>
+      widget.word.model3dPath != null && widget.word.model3dPath!.isNotEmpty;
+
+  bool get _hasAudio =>
+      widget.word.audioPath != null && widget.word.audioPath!.isNotEmpty;
 
   @override
   void initState() {
@@ -38,17 +43,13 @@ class _LessonScreenState extends State<LessonScreen> {
   void _setupAudioListeners() {
     _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
       if (mounted) {
-        setState(() {
-          _isPlayingAudio = state == PlayerState.playing;
-        });
+        setState(() => _isPlayingAudio = state == PlayerState.playing);
       }
     });
 
     _audioPlayer.onPlayerComplete.listen((_) {
       if (mounted) {
-        setState(() {
-          _isPlayingAudio = false;
-        });
+        setState(() => _isPlayingAudio = false);
       }
     });
   }
@@ -60,7 +61,8 @@ class _LessonScreenState extends State<LessonScreen> {
   }
 
   Future<void> _loadLearnedStatus() async {
-    final isLearned = await DatabaseHelper.instance.isWordLearned(widget.word.id!);
+    final isLearned =
+    await DatabaseHelper.instance.isWordLearned(widget.word.id!);
     setState(() {
       _isLearned = isLearned;
       _isLoading = false;
@@ -69,18 +71,13 @@ class _LessonScreenState extends State<LessonScreen> {
 
   Future<void> _toggleLearned() async {
     final newStatus = !_isLearned;
-
-    setState(() {
-      _isLearned = newStatus;
-    });
-
+    setState(() => _isLearned = newStatus);
     await DatabaseHelper.instance.toggleWordLearned(widget.word.id!, newStatus);
     _showLearnedFeedback();
   }
 
   Future<void> _playAudio() async {
     final audioUrl = widget.word.audioPath;
-
     if (audioUrl == null || audioUrl.isEmpty) {
       _showSnackBar('Audio no disponible para esta palabra', AppColors.warning);
       return;
@@ -91,27 +88,18 @@ class _LessonScreenState extends State<LessonScreen> {
         await _audioPlayer.stop();
         return;
       }
-
-      setState(() {
-        _isPlayingAudio = true;
-      });
-
+      setState(() => _isPlayingAudio = true);
       await _audioPlayer.play(UrlSource(audioUrl));
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isPlayingAudio = false;
-        });
+        setState(() => _isPlayingAudio = false);
         _showSnackBar('Error al reproducir el audio', AppColors.error);
       }
     }
   }
 
   void _openArView() {
-    // Detener audio si está reproduciendo antes de navegar
-    if (_isPlayingAudio) {
-      _audioPlayer.stop();
-    }
+    if (_isPlayingAudio) _audioPlayer.stop();
 
     Navigator.push(
       context,
@@ -126,17 +114,17 @@ class _LessonScreenState extends State<LessonScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: widget.moduleColor,
         foregroundColor: AppColors.textLight,
         elevation: 0,
         title: Text(
           'Lección',
-          style: AppTextStyles.h3.copyWith(
-            color: AppColors.textLight,
-          ),
+          style: AppTextStyles.h3.copyWith(color: AppColors.textLight),
         ),
         actions: [
           if (!_isLoading)
@@ -152,7 +140,8 @@ class _LessonScreenState extends State<LessonScreen> {
       body: _isLoading
           ? Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(widget.moduleColor),
+          valueColor:
+          AlwaysStoppedAnimation<Color>(widget.moduleColor),
         ),
       )
           : SingleChildScrollView(
@@ -161,15 +150,15 @@ class _LessonScreenState extends State<LessonScreen> {
           children: [
             _buildHeader(),
             const SizedBox(height: 24),
-            _buildMainCard(),
+            _buildMainCard(isDark),
             const SizedBox(height: 16),
-            _buildPhoneticCard(),
+            _buildPhoneticCard(isDark),
             const SizedBox(height: 16),
             _buildLearnedButton(),
             const SizedBox(height: 16),
             _buildActionButtons(),
             const SizedBox(height: 24),
-            _buildInfoSection(),
+            _buildInfoSection(isDark),
             const SizedBox(height: 24),
           ],
         ),
@@ -217,11 +206,12 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
-  Widget _buildMainCard() {
+  Widget _buildMainCard(bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Card(
         elevation: 4,
+        color: isDark ? Theme.of(context).cardColor : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -233,14 +223,15 @@ class _LessonScreenState extends State<LessonScreen> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                widget.moduleColor.withOpacity(0.1),
-                widget.moduleColor.withOpacity(0.05),
+                widget.moduleColor.withOpacity(isDark ? 0.2 : 0.1),
+                widget.moduleColor.withOpacity(isDark ? 0.1 : 0.05),
               ],
             ),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: widget.word.imagePath != null && widget.word.imagePath!.isNotEmpty
+            child: widget.word.imagePath != null &&
+                widget.word.imagePath!.isNotEmpty
                 ? Image.network(
               widget.word.imagePath!,
               fit: BoxFit.cover,
@@ -252,7 +243,8 @@ class _LessonScreenState extends State<LessonScreen> {
                         ? loadingProgress.cumulativeBytesLoaded /
                         loadingProgress.expectedTotalBytes!
                         : null,
-                    valueColor: AlwaysStoppedAnimation<Color>(widget.moduleColor),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        widget.moduleColor),
                   ),
                 );
               },
@@ -261,16 +253,16 @@ class _LessonScreenState extends State<LessonScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 60,
-                        color: AppColors.error.withOpacity(0.5),
-                      ),
+                      Icon(Icons.error_outline,
+                          size: 60,
+                          color: AppColors.error.withOpacity(0.5)),
                       const SizedBox(height: 16),
                       Text(
                         'Error al cargar imagen',
                         style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textSecondary,
+                          color: isDark
+                              ? Colors.white54
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ],
@@ -282,16 +274,16 @@ class _LessonScreenState extends State<LessonScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.image_outlined,
-                    size: 100,
-                    color: widget.moduleColor.withOpacity(0.5),
-                  ),
+                  Icon(Icons.image_outlined,
+                      size: 100,
+                      color: widget.moduleColor.withOpacity(0.5)),
                   const SizedBox(height: 16),
                   Text(
                     'Imagen no disponible',
                     style: AppTextStyles.bodyLarge.copyWith(
-                      color: AppColors.textSecondary,
+                      color: isDark
+                          ? Colors.white54
+                          : AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -303,11 +295,12 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
-  Widget _buildPhoneticCard() {
+  Widget _buildPhoneticCard(bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Card(
         elevation: 2,
+        color: isDark ? Theme.of(context).cardColor : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -315,11 +308,8 @@ class _LessonScreenState extends State<LessonScreen> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(
-                Icons.record_voice_over,
-                color: widget.moduleColor,
-                size: 28,
-              ),
+              Icon(Icons.record_voice_over,
+                  color: widget.moduleColor, size: 28),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -328,7 +318,8 @@ class _LessonScreenState extends State<LessonScreen> {
                     Text(
                       'Pronunciación',
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
+                        color:
+                        isDark ? Colors.white54 : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -341,7 +332,6 @@ class _LessonScreenState extends State<LessonScreen> {
                   ],
                 ),
               ),
-              // Botón de audio en la tarjeta de pronunciación
               _buildMiniAudioButton(),
             ],
           ),
@@ -351,10 +341,8 @@ class _LessonScreenState extends State<LessonScreen> {
   }
 
   Widget _buildMiniAudioButton() {
-    final hasAudio = widget.word.audioPath != null && widget.word.audioPath!.isNotEmpty;
-
     return GestureDetector(
-      onTap: hasAudio ? _playAudio : null,
+      onTap: _hasAudio ? _playAudio : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(10),
@@ -366,9 +354,7 @@ class _LessonScreenState extends State<LessonScreen> {
         ),
         child: Icon(
           _isPlayingAudio ? Icons.stop_rounded : Icons.volume_up_rounded,
-          color: _isPlayingAudio
-              ? AppColors.textLight
-              : widget.moduleColor,
+          color: _isPlayingAudio ? AppColors.textLight : widget.moduleColor,
           size: 24,
         ),
       ),
@@ -383,10 +369,14 @@ class _LessonScreenState extends State<LessonScreen> {
         icon: Icon(
           _isLearned ? Icons.check_circle : Icons.check_circle_outline,
         ),
-        label: Text(_isLearned ? '¡Palabra aprendida!' : 'Marcar como aprendida'),
+        label:
+        Text(_isLearned ? '¡Palabra aprendida!' : 'Marcar como aprendida'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: _isLearned ? AppColors.success : widget.moduleColor.withOpacity(0.2),
-          foregroundColor: _isLearned ? AppColors.textLight : widget.moduleColor,
+          backgroundColor: _isLearned
+              ? AppColors.success
+              : widget.moduleColor.withOpacity(0.2),
+          foregroundColor:
+          _isLearned ? AppColors.textLight : widget.moduleColor,
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -400,16 +390,15 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
+  // ─── OCULTA "Ver en RA" SI NO HAY MODELO 3D ───
   Widget _buildActionButtons() {
-    final hasAudio = widget.word.audioPath != null && widget.word.audioPath!.isNotEmpty;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         children: [
           Expanded(
             child: ElevatedButton.icon(
-              onPressed: hasAudio ? _playAudio : null,
+              onPressed: _hasAudio ? _playAudio : null,
               icon: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 child: Icon(
@@ -430,28 +419,35 @@ class _LessonScreenState extends State<LessonScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: _openArView,
-              icon: const Icon(Icons.view_in_ar),
-              label: const Text('Ver en RA'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accent,
-                foregroundColor: AppColors.textLight,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          if (_hasModel3D) ...[
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _openArView,
+                icon: const Icon(Icons.view_in_ar),
+                label: const Text('Ver en RA'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accent,
+                  foregroundColor: AppColors.textLight,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildInfoSection() {
+  Widget _buildInfoSection(bool isDark) {
+    final infoText = _hasModel3D
+        ? 'Presiona "Escuchar" para oír la pronunciación en quechua. '
+        'Presiona "Ver en RA" para explorar el modelo 3D e interactuar con realidad aumentada.'
+        : 'Presiona "Escuchar" para oír la pronunciación en quechua.';
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -459,31 +455,33 @@ class _LessonScreenState extends State<LessonScreen> {
         children: [
           Text(
             'Sobre esta palabra',
-            style: AppTextStyles.h3,
+            style: AppTextStyles.h3.copyWith(
+              color: isDark ? Colors.white : null,
+            ),
           ),
           const SizedBox(height: 12),
           _buildInfoItem(
-            icon: Icons.translate,
-            title: 'Quechua',
-            content: widget.word.wordQuechua,
-          ),
+              icon: Icons.translate,
+              title: 'Quechua',
+              content: widget.word.wordQuechua,
+              isDark: isDark),
           const SizedBox(height: 8),
           _buildInfoItem(
-            icon: Icons.language,
-            title: 'Español',
-            content: widget.word.wordSpanish,
-          ),
+              icon: Icons.language,
+              title: 'Español',
+              content: widget.word.wordSpanish,
+              isDark: isDark),
           const SizedBox(height: 8),
           _buildInfoItem(
-            icon: Icons.text_fields,
-            title: 'Pronunciación fonética',
-            content: widget.word.phonetic,
-          ),
+              icon: Icons.text_fields,
+              title: 'Pronunciación fonética',
+              content: widget.word.phonetic,
+              isDark: isDark),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: widget.moduleColor.withOpacity(0.1),
+              color: widget.moduleColor.withOpacity(isDark ? 0.15 : 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: widget.moduleColor.withOpacity(0.3),
@@ -492,17 +490,13 @@ class _LessonScreenState extends State<LessonScreen> {
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.info_outline,
-                  color: widget.moduleColor,
-                  size: 24,
-                ),
+                Icon(Icons.info_outline, color: widget.moduleColor, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Presiona "Escuchar" para oír la pronunciación en quechua. Presiona "Ver en RA" para explorar el modelo 3D e interactuar con realidad aumentada.',
+                    infoText,
                     style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textPrimary,
+                      color: isDark ? Colors.white70 : AppColors.textPrimary,
                     ),
                   ),
                 ),
@@ -518,20 +512,17 @@ class _LessonScreenState extends State<LessonScreen> {
     required IconData icon,
     required String title,
     required String content,
+    required bool isDark,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: isDark ? Theme.of(context).cardColor : AppColors.surface,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
-          Icon(
-            icon,
-            color: widget.moduleColor,
-            size: 20,
-          ),
+          Icon(icon, color: widget.moduleColor, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -540,7 +531,7 @@ class _LessonScreenState extends State<LessonScreen> {
                 Text(
                   title,
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: isDark ? Colors.white54 : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -548,6 +539,7 @@ class _LessonScreenState extends State<LessonScreen> {
                   content,
                   style: AppTextStyles.bodyMedium.copyWith(
                     fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : null,
                   ),
                 ),
               ],
@@ -573,9 +565,7 @@ class _LessonScreenState extends State<LessonScreen> {
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );

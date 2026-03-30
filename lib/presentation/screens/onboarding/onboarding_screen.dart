@@ -8,8 +8,10 @@ class OnboardingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -27,7 +29,9 @@ class OnboardingScreen extends StatelessWidget {
               // Título
               Text(
                 '¡Bienvenido!',
-                style: AppTextStyles.h1,
+                style: AppTextStyles.h1.copyWith(
+                  color: isDark ? Colors.white : AppColors.textPrimary,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -35,7 +39,7 @@ class OnboardingScreen extends StatelessWidget {
               Text(
                 'Aprende quechua de forma interactiva con realidad aumentada',
                 style: AppTextStyles.bodyLarge.copyWith(
-                  color: AppColors.textSecondary,
+                  color: isDark ? Colors.white60 : AppColors.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),

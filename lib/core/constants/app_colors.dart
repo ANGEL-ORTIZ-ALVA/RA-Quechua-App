@@ -31,4 +31,43 @@ class AppColors {
   // Colores para progreso
   static const Color progressBackground = Color(0xFFE0E0E0);
   static const Color progressFill = Color(0xFF4CAF50);
+
+  // ─── COLORES POR MÓDULO (centralizado) ───
+  static const List<Color> moduleColors = [
+    Color(0xFFC62828), // 1 Animales     — rojo intenso
+    Color(0xFF2E7D32), // 2 Naturaleza   — verde bosque
+    Color(0xFF00838F), // 3 Familia      — teal
+    Color(0xFF1565C0), // 4 Números      — azul
+    Color(0xFF6A1B9A), // 5 Saludos      — púrpura
+    Color(0xFFAD1457), // 6 Colores      — rosa
+  ];
+
+  /// Devuelve el color del módulo según su ID (1-based).
+  /// Usar SIEMPRE este método en vez de switch locales.
+  static Color getModuleColor(int moduleId) {
+    if (moduleId >= 1 && moduleId <= moduleColors.length) {
+      return moduleColors[moduleId - 1];
+    }
+    return primary;
+  }
+
+  /// Mapea el string del ícono (almacenado en la BD) a IconData
+  static IconData getModuleIcon(String iconName) {
+    switch (iconName) {
+      case 'pets':
+        return Icons.pets;
+      case 'park':
+        return Icons.park;
+      case 'family_restroom':
+        return Icons.family_restroom;
+      case 'pin':
+        return Icons.tag;
+      case 'waving_hand':
+        return Icons.waving_hand;
+      case 'palette':
+        return Icons.palette;
+      default:
+        return Icons.book;
+    }
+  }
 }

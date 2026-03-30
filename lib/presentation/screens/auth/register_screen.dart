@@ -25,9 +25,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_formKey.currentState!.validate()) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_name', _nameController.text);
-      await prefs.setString('user_level', 'Principiante'); // Nivel fijo inicial
+      await prefs.setString('user_level', 'Qallariq');
       await prefs.setBool('is_registered', true);
-      await prefs.setInt('words_learned', 0); // Contador de progreso
+      await prefs.setInt('words_learned', 0);
 
       if (mounted) {
         Navigator.pushReplacementNamed(context, AppRoutes.home);
@@ -37,13 +37,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: Icon(
+            Icons.arrow_back,
+            color: isDark ? Colors.white : AppColors.textPrimary,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -58,13 +63,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Título
                 Text(
                   '¡Empecemos!',
-                  style: AppTextStyles.h1,
+                  style: AppTextStyles.h1.copyWith(
+                    color: isDark ? Colors.white : AppColors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Cuéntanos cómo te llamas para personalizar tu experiencia',
                   style: AppTextStyles.bodyLarge.copyWith(
-                    color: AppColors.textSecondary,
+                    color: isDark ? Colors.white60 : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 48),
@@ -72,19 +79,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 // Campo de nombre
                 Text(
                   '¿Cómo te llamas?',
-                  style: AppTextStyles.h3,
+                  style: AppTextStyles.h3.copyWith(
+                    color: isDark ? Colors.white : AppColors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.words,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : AppColors.textPrimary,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Tu nombre',
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.white38 : null,
+                    ),
                     filled: true,
-                    fillColor: AppColors.surface,
+                    fillColor: isDark
+                        ? const Color(0xFF2A2A2A)
+                        : AppColors.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? Colors.white.withOpacity(0.1)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppColors.primary,
+                        width: 2,
+                      ),
                     ),
                     prefixIcon: Icon(
                       Icons.person_outline,
@@ -107,7 +139,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.info.withOpacity(0.1),
+                    color: isDark
+                        ? AppColors.info.withOpacity(0.15)
+                        : AppColors.info.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: AppColors.info.withOpacity(0.3),
@@ -126,7 +160,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: Text(
                           'Comenzarás en nivel Principiante y avanzarás automáticamente según tu progreso',
                           style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textPrimary,
+                            color: isDark ? Colors.white70 : AppColors.textPrimary,
                           ),
                         ),
                       ),

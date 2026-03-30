@@ -23,6 +23,7 @@ class ModuleScreen extends StatefulWidget {
 class _ModuleScreenState extends State<ModuleScreen> {
   List<WordModel> _words = [];
   bool _isLoading = true;
+  Map<int, bool> _learnedStatus = {}; // wordId -> isLearned
 
   @override
   void initState() {
@@ -32,25 +33,49 @@ class _ModuleScreenState extends State<ModuleScreen> {
 
   Future<void> _loadWords() async {
     try {
-      final words = await DatabaseHelper.instance.getWordsByModule(widget.module.id!);
+      final words =
+      await DatabaseHelper.instance.getWordsByModule(widget.module.id!);
+
+      // Cargar estado de aprendizaje de cada palabra
+      Map<int, bool> learnedMap = {};
+      for (var word in words) {
+        final isLearned =
+        await DatabaseHelper.instance.isWordLearned(word.id!);
+        learnedMap[word.id!] = isLearned;
+      }
+
       setState(() {
         _words = words;
+        _learnedStatus = learnedMap;
         _isLoading = false;
       });
     } catch (e) {
       print('Error loading words: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
 
+  /// Recargar al volver de una lección (el usuario pudo marcar/desmarcar)
+  Future<void> _refreshLearnedStatus() async {
+    Map<int, bool> learnedMap = {};
+    for (var word in _words) {
+      final isLearned = await DatabaseHelper.instance.isWordLearned(word.id!);
+      learnedMap[word.id!] = isLearned;
+    }
+    setState(() => _learnedStatus = learnedMap);
+  }
+
+  /// Color centralizado desde AppColors
+  Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: _getModuleColor(),  // ← DINÁMICO POR MÓDULO
+        backgroundColor: _moduleColor,
         foregroundColor: AppColors.textLight,
         elevation: 0,
         title: Column(
@@ -58,9 +83,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
           children: [
             Text(
               widget.module.name,
-              style: AppTextStyles.h3.copyWith(
-                color: AppColors.textLight,
-              ),
+              style: AppTextStyles.h3.copyWith(color: AppColors.textLight),
             ),
             Text(
               widget.module.nameQuechua,
@@ -74,22 +97,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _words.isEmpty
-          ? _buildEmptyState()
+          ? _buildEmptyState(isDark)
           : Column(
         children: [
           _buildHeader(),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // ← Espacio para botón flotante
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
               itemCount: _words.length,
               itemBuilder: (context, index) {
-                return _buildWordCard(_words[index], index);
+                return _buildWordCard(
+                    _words[index], index, isDark);
               },
             ),
           ),
         ],
       ),
-      // ← NUEVO: Botón flotante GRANDE de evaluación
       floatingActionButton: _isLoading || _words.isEmpty
           ? null
           : _buildEvaluationButton(context),
@@ -98,14 +121,17 @@ class _ModuleScreenState extends State<ModuleScreen> {
   }
 
   Widget _buildHeader() {
+    final learnedCount =
+        _learnedStatus.values.where((v) => v).length;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _getModuleColor(),
+        color: _moduleColor,
         boxShadow: [
           BoxShadow(
-            color: _getModuleColor().withOpacity(0.3),
+            color: _moduleColor.withOpacity(0.3),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -122,7 +148,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                Icons.book,
+                AppColors.getModuleIcon(widget.module.icon),
                 color: AppColors.textLight,
                 size: 24,
               ),
@@ -139,7 +165,9 @@ class _ModuleScreenState extends State<ModuleScreen> {
                     ),
                   ),
                   Text(
-                    'Toca una palabra para aprender más',
+                    learnedCount > 0
+                        ? '$learnedCount aprendidas · Toca para aprender más'
+                        : 'Toca una palabra para aprender más',
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textLight.withOpacity(0.9),
                     ),
@@ -153,7 +181,6 @@ class _ModuleScreenState extends State<ModuleScreen> {
     );
   }
 
-  // ← NUEVO: Botón flotante de evaluación MUY VISIBLE
   Widget _buildEvaluationButton(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -162,14 +189,14 @@ class _ModuleScreenState extends State<ModuleScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            _getModuleColor(),
-            _getModuleColor().withOpacity(0.8),
+            _moduleColor,
+            _moduleColor.withOpacity(0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _getModuleColor().withOpacity(0.4),
+            color: _moduleColor.withOpacity(0.4),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -182,9 +209,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => EvaluationScreen(
-                  module: widget.module,
-                ),
+                builder: (context) =>
+                    EvaluationScreen(module: widget.module),
               ),
             );
           },
@@ -194,11 +220,7 @@ class _ModuleScreenState extends State<ModuleScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.quiz,
-                  color: AppColors.textLight,
-                  size: 28,
-                ),
+                Icon(Icons.quiz, color: AppColors.textLight, size: 28),
                 const SizedBox(width: 16),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -220,11 +242,8 @@ class _ModuleScreenState extends State<ModuleScreen> {
                   ],
                 ),
                 const Spacer(),
-                Icon(
-                  Icons.arrow_forward,
-                  color: AppColors.textLight,
-                  size: 24,
-                ),
+                Icon(Icons.arrow_forward,
+                    color: AppColors.textLight, size: 24),
               ],
             ),
           ),
@@ -233,43 +252,62 @@ class _ModuleScreenState extends State<ModuleScreen> {
     );
   }
 
-  Widget _buildWordCard(WordModel word, int index) {
+  // ─── TARJETA DE PALABRA CON INDICADOR DE APRENDIDA ───
+  Widget _buildWordCard(WordModel word, int index, bool isDark) {
+    final isLearned = _learnedStatus[word.id] ?? false;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
+      elevation: isLearned ? 1 : 2,
+      color: isDark ? Theme.of(context).cardColor : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
+        side: isLearned
+            ? BorderSide(color: AppColors.success.withOpacity(0.5), width: 1.5)
+            : BorderSide.none,
       ),
       child: InkWell(
-        onTap: () {
-          Navigator.push(
+        onTap: () async {
+          await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => LessonScreen(
                 word: word,
-                moduleColor: _getModuleColor(),
+                moduleColor: _moduleColor,
               ),
             ),
           );
+          // Recargar estado al volver
+          _refreshLearnedStatus();
         },
         borderRadius: BorderRadius.circular(12),
-        child: Padding(
+        child: Container(
+          decoration: isLearned
+              ? BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: AppColors.success.withOpacity(isDark ? 0.08 : 0.04),
+          )
+              : null,
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Número de orden
+              // Número / Check
               Container(
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: _getModuleColor().withOpacity(0.1),
+                  color: isLearned
+                      ? AppColors.success.withOpacity(0.15)
+                      : _moduleColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
-                  child: Text(
+                  child: isLearned
+                      ? Icon(Icons.check, color: AppColors.success, size: 22)
+                      : Text(
                     '${index + 1}',
                     style: AppTextStyles.h3.copyWith(
-                      color: _getModuleColor(),
+                      color: _moduleColor,
                     ),
                   ),
                 ),
@@ -283,20 +321,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
                   children: [
                     Text(
                       word.wordQuechua,
-                      style: AppTextStyles.h3,
+                      style: AppTextStyles.h3.copyWith(
+                        color: isDark ? Colors.white : null,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       word.wordSpanish,
                       style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.textSecondary,
+                        color: isDark ? Colors.white60 : AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       word.phonetic,
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: _getModuleColor(),
+                        color: _moduleColor,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -304,18 +344,22 @@ class _ModuleScreenState extends State<ModuleScreen> {
                 ),
               ),
 
-              // Iconos de acción
+              // Indicador visual
               Column(
                 children: [
                   Icon(
-                    Icons.visibility,
-                    color: AppColors.textSecondary,
+                    isLearned
+                        ? Icons.visibility
+                        : Icons.visibility_outlined,
+                    color: isLearned
+                        ? AppColors.success
+                        : (isDark ? Colors.white38 : AppColors.textSecondary),
                     size: 20,
                   ),
                   const SizedBox(height: 8),
                   Icon(
                     Icons.arrow_forward_ios,
-                    color: AppColors.textSecondary,
+                    color: isDark ? Colors.white38 : AppColors.textSecondary,
                     size: 16,
                   ),
                 ],
@@ -327,43 +371,30 @@ class _ModuleScreenState extends State<ModuleScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: AppColors.textSecondary,
-          ),
+          Icon(Icons.error_outline,
+              size: 64,
+              color: isDark ? Colors.white38 : AppColors.textSecondary),
           const SizedBox(height: 16),
           Text(
             'No hay palabras disponibles',
-            style: AppTextStyles.h3,
+            style: AppTextStyles.h3.copyWith(
+              color: isDark ? Colors.white : null,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             'Este módulo está vacío',
             style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textSecondary,
+              color: isDark ? Colors.white54 : AppColors.textSecondary,
             ),
           ),
         ],
       ),
     );
-  }
-
-  Color _getModuleColor() {
-    switch (widget.module.id) {
-      case 1:
-        return AppColors.primary;
-      case 2:
-        return AppColors.secondary;
-      case 3:
-        return AppColors.accent;
-      default:
-        return AppColors.primary;
-    }
   }
 }

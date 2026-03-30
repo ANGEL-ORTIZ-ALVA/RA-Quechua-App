@@ -16,11 +16,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _userName = '';
-  String _userLevel = '';
   List<ModuleModel> _modules = [];
   bool _isLoading = true;
   int _totalLearnedWords = 0;
-  Map<int, int> _moduleProgress = {}; // moduleId -> palabras aprendidas
+  Map<int, int> _moduleProgress = {};
+  int _streakDays = 0;
 
   @override
   void initState() {
@@ -32,22 +32,20 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadUserData();
     await _loadModules();
     await _loadProgress();
+    await _updateStreak();
   }
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _userName = prefs.getString('user_name') ?? 'Usuario';
-      _userLevel = prefs.getString('user_level') ?? 'Principiante';
     });
   }
 
   Future<void> _loadModules() async {
     try {
       final modules = await DatabaseHelper.instance.getAllModules();
-      setState(() {
-        _modules = modules;
-      });
+      setState(() => _modules = modules);
     } catch (e) {
       print('Error loading modules: $e');
     }
@@ -59,7 +57,8 @@ class _HomeScreenState extends State<HomeScreen> {
       Map<int, int> moduleProgressMap = {};
 
       for (var module in _modules) {
-        final learned = await DatabaseHelper.instance.getLearnedWordsCount(module.id!);
+        final learned =
+        await DatabaseHelper.instance.getLearnedWordsCount(module.id!);
         moduleProgressMap[module.id!] = learned;
         total += learned;
       }
@@ -69,22 +68,84 @@ class _HomeScreenState extends State<HomeScreen> {
         _moduleProgress = moduleProgressMap;
         _isLoading = false;
       });
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_level', _getLevelLabel());
     } catch (e) {
       print('Error loading progress: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
+  }
+
+  // ─── RACHA DE DÍAS CONSECUTIVOS ───
+  Future<void> _updateStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final todayStr = _dateToString(DateTime.now());
+    final lastActiveDate = prefs.getString('last_active_date') ?? '';
+    final currentStreak = prefs.getInt('streak_count') ?? 0;
+
+    if (lastActiveDate == todayStr) {
+      setState(() => _streakDays = currentStreak);
+      return;
+    }
+
+    final yesterdayStr =
+    _dateToString(DateTime.now().subtract(const Duration(days: 1)));
+
+    int newStreak;
+    if (lastActiveDate == yesterdayStr) {
+      newStreak = currentStreak + 1;
+    } else {
+      newStreak = 1;
+    }
+
+    await prefs.setString('last_active_date', todayStr);
+    await prefs.setInt('streak_count', newStreak);
+    setState(() => _streakDays = newStreak);
+  }
+
+  String _dateToString(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   Future<void> _refreshProgress() async {
     await _loadProgress();
   }
 
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Allin punchaw';
+    if (hour >= 12 && hour < 18) return 'Allin chisi';
+    return 'Allin tuta';
+  }
+
+  String _getLevelLabel() {
+    final totalWords = _modules.length * 10;
+    if (totalWords == 0) return 'Qallariq';
+    if (_totalLearnedWords >= (totalWords * 0.67).round()) return "Hamawt'a";
+    if (_totalLearnedWords >= (totalWords * 0.33).round()) return 'Yachaq';
+    return 'Qallariq';
+  }
+
+  String _getLevelSubtitle() {
+    switch (_getLevelLabel()) {
+      case 'Qallariq':
+        return 'Principiante';
+      case 'Yachaq':
+        return 'Intermedio';
+      case "Hamawt'a":
+        return 'Avanzado';
+      default:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
@@ -97,16 +158,20 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(),
-                  const SizedBox(height: 32),
-                  _buildProgressCard(),
+                  _buildHeader(isDark),
+                  const SizedBox(height: 24),
+                  _buildStreakCard(isDark),
+                  const SizedBox(height: 16),
+                  _buildProgressCard(isDark),
                   const SizedBox(height: 32),
                   Text(
                     'Módulos de Aprendizaje',
-                    style: AppTextStyles.h2,
+                    style: AppTextStyles.h2.copyWith(
+                      color: isDark ? Colors.white : null,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  ..._buildModuleCards(),
+                  ..._buildModuleCards(isDark),
                 ],
               ),
             ),
@@ -116,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(bool isDark) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -125,23 +190,21 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '¡Allin p\'unchay, $_userName!',
-                style: AppTextStyles.h2,
+                '¡${_getGreeting()}, $_userName!',
+                style: AppTextStyles.h2.copyWith(
+                  color: isDark ? Colors.white : null,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(
-                    Icons.star,
-                    size: 16,
-                    color: AppColors.secondary,
-                  ),
+                  Icon(Icons.star, size: 16, color: AppColors.secondary),
                   const SizedBox(width: 4),
                   Text(
-                    'Nivel: $_userLevel',
+                    '${_getLevelLabel()} · ${_getLevelSubtitle()}',
                     style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textSecondary,
+                      color: isDark ? Colors.white70 : AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -151,48 +214,139 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         CircleAvatar(
           radius: 28,
-          backgroundColor: AppColors.primary.withOpacity(0.1),
-          child: Icon(
-            Icons.person,
-            size: 32,
-            color: AppColors.primary,
-          ),
+          backgroundColor: AppColors.primary.withOpacity(isDark ? 0.3 : 0.1),
+          child: Icon(Icons.person, size: 32, color: AppColors.primary),
         ),
       ],
     );
   }
 
-  Widget _buildProgressCard() {
-    final progressPercentage = _totalLearnedWords / 30;
+  Widget _buildStreakCard(bool isDark) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.secondary.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                _streakDays > 0 ? '🔥' : '❄️',
+                style: const TextStyle(fontSize: 24),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$_streakDays ${_streakDays == 1 ? 'día' : 'días'} de racha',
+                  style: AppTextStyles.h3.copyWith(
+                    color: isDark ? Colors.white : AppColors.textPrimary,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _streakDays >= 7
+                      ? '¡Increíble constancia! Sigue así'
+                      : _streakDays >= 3
+                      ? '¡Vas muy bien! No pierdas la racha'
+                      : '¡Aprende hoy para mantener tu racha!',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: isDark ? Colors.white54 : AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            '$_streakDays',
+            style: AppTextStyles.h1.copyWith(
+              color: AppColors.secondary,
+              fontSize: 36,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressCard(bool isDark) {
+    final totalWords = _modules.length * 10;
+    final progressPercentage =
+    totalWords > 0 ? _totalLearnedWords / totalWords : 0.0;
+
     final progressMessage = _totalLearnedWords == 0
         ? '¡Comienza tu viaje de aprendizaje!'
-        : _totalLearnedWords < 15
+        : _totalLearnedWords < (totalWords * 0.25).round()
         ? '¡Vas muy bien! Sigue aprendiendo'
-        : _totalLearnedWords < 30
-        ? '¡Estás cerca de completar el nivel!'
+        : _totalLearnedWords < (totalWords * 0.75).round()
+        ? '¡Gran progreso! Ya dominas varias palabras'
+        : _totalLearnedWords < totalWords
+        ? '¡Estás cerca de completar todo!'
         : '¡Felicidades! Has completado todas las palabras';
+
+    // En dark mode: fondo gris oscuro con borde de acento
+    // En light mode: gradiente rojo original
+    final decoration = isDark
+        ? BoxDecoration(
+      color: const Color(0xFF2A2A2A),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: AppColors.primary.withOpacity(0.4),
+        width: 1.5,
+      ),
+    )
+        : BoxDecoration(
+      gradient: LinearGradient(
+        colors: [AppColors.primary, AppColors.primaryDark],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.primary.withOpacity(0.3),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+
+    // Colores de texto adaptados
+    final titleColor = isDark ? Colors.white : AppColors.textLight;
+    final badgeBg = isDark
+        ? AppColors.primary.withOpacity(0.3)
+        : Colors.white.withOpacity(0.2);
+    final badgeText = isDark ? AppColors.primaryLight : AppColors.textLight;
+    final progressBg = isDark
+        ? Colors.white.withOpacity(0.15)
+        : Colors.white.withOpacity(0.3);
+    final progressFill = isDark ? AppColors.primaryLight : Colors.white;
+    final messageColor = isDark
+        ? Colors.white70
+        : AppColors.textLight.withOpacity(0.9);
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.primary,
-            AppColors.primaryDark,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+      decoration: decoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -201,23 +355,19 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 'Tu Progreso',
-                style: AppTextStyles.h3.copyWith(
-                  color: AppColors.textLight,
-                ),
+                style: AppTextStyles.h3.copyWith(color: titleColor),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: badgeBg,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  '$_totalLearnedWords/30',
+                  '$_totalLearnedWords/$totalWords',
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.textLight,
+                    color: badgeText,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -229,45 +379,28 @@ class _HomeScreenState extends State<HomeScreen> {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progressPercentage,
-              backgroundColor: Colors.white.withOpacity(0.3),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              backgroundColor: progressBg,
+              valueColor: AlwaysStoppedAnimation<Color>(progressFill),
               minHeight: 8,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             progressMessage,
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.textLight.withOpacity(0.9),
-            ),
+            style: AppTextStyles.bodyMedium.copyWith(color: messageColor),
           ),
         ],
       ),
     );
   }
 
-  List<Widget> _buildModuleCards() {
-    final colors = [
-      AppColors.primary,
-      AppColors.secondary,
-      AppColors.accent,
-    ];
-
-    final icons = [
-      Icons.pets,
-      Icons.park,
-      Icons.family_restroom,
-    ];
-
+  List<Widget> _buildModuleCards(bool isDark) {
     return _modules.asMap().entries.map((entry) {
-      final index = entry.key;
       final module = entry.value;
-      final color = colors[index % colors.length];
-      final icon = icons[index % icons.length];
-
-      // Obtener palabras aprendidas de este módulo
+      final color = AppColors.getModuleColor(module.id ?? 1);
+      final icon = AppColors.getModuleIcon(module.icon);
       final learnedWords = _moduleProgress[module.id] ?? 0;
-      final progress = learnedWords / 10.0; // 10 palabras por módulo
+      final progress = learnedWords / 10.0;
 
       return Padding(
         padding: const EdgeInsets.only(bottom: 16.0),
@@ -277,15 +410,14 @@ class _HomeScreenState extends State<HomeScreen> {
           color: color,
           progress: progress,
           learnedWords: learnedWords,
+          isDark: isDark,
           onTap: () async {
-            // Navegar al módulo y esperar a que regrese
             await Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => ModuleScreen(module: module),
               ),
             );
-            // Recargar progreso al regresar
             _refreshProgress();
           },
         ),
@@ -299,6 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required double progress,
     required int learnedWords,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
     return InkWell(
@@ -307,10 +440,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: AppColors.progressBackground,
+            color: isDark
+                ? Colors.white.withOpacity(0.08)
+                : AppColors.progressBackground,
             width: 1,
           ),
         ),
@@ -320,14 +455,10 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: color.withOpacity(isDark ? 0.2 : 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(
-                icon,
-                color: color,
-                size: 28,
-              ),
+              child: Icon(icon, color: color, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -336,7 +467,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     module.name,
-                    style: AppTextStyles.h3,
+                    style: AppTextStyles.h3.copyWith(
+                      color: isDark ? Colors.white : null,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -349,15 +482,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(
-                        Icons.book_outlined,
-                        size: 16,
-                        color: AppColors.textSecondary,
-                      ),
+                      Icon(Icons.book_outlined,
+                          size: 16,
+                          color: isDark
+                              ? Colors.white54
+                              : AppColors.textSecondary),
                       const SizedBox(width: 4),
                       Text(
                         '$learnedWords/10 palabras',
-                        style: AppTextStyles.bodySmall,
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: isDark ? Colors.white54 : null,
+                        ),
                       ),
                     ],
                   ),
@@ -366,7 +501,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: AppColors.progressBackground,
+                      backgroundColor: isDark
+                          ? Colors.white.withOpacity(0.1)
+                          : AppColors.progressBackground,
                       valueColor: AlwaysStoppedAnimation<Color>(color),
                       minHeight: 4,
                     ),
@@ -374,25 +511,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 20,
-              color: AppColors.textSecondary,
-            ),
+            Icon(Icons.arrow_forward_ios,
+                size: 20,
+                color: isDark ? Colors.white38 : AppColors.textSecondary),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _showComingSoon(BuildContext context, String moduleName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$moduleName - Próximamente en Sprint 2'),
-        backgroundColor: AppColors.info,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
         ),
       ),
     );

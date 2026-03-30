@@ -28,11 +28,38 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Yachay Quechua',
       debugShowCheckedModeBanner: false,
+
+      // ─── Sigue el tema del sistema (claro/oscuro) ───
+      themeMode: ThemeMode.system,
+
+      // ─── TEMA CLARO ───
       theme: ThemeData(
+        brightness: Brightness.light,
         primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.background,
+        scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+        cardColor: Colors.white,
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primary,
+          brightness: Brightness.light,
+        ),
+        appBarTheme: const AppBarTheme(elevation: 0),
       ),
+
+      // ─── TEMA OSCURO ───
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        primaryColor: AppColors.primary,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        cardColor: const Color(0xFF1E1E1E),
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primary,
+          brightness: Brightness.dark,
+        ),
+        appBarTheme: const AppBarTheme(elevation: 0),
+      ),
+
       initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash: (context) => const SplashScreen(),

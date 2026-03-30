@@ -28,6 +28,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   bool _isLoading = true;
   bool _isEvaluationComplete = false;
 
+  /// Color centralizado
+  Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+
   @override
   void initState() {
     super.initState();
@@ -36,24 +39,22 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
   Future<void> _generateQuestions() async {
     try {
-      final words = await DatabaseHelper.instance.getWordsByModule(widget.module.id!);
+      final words =
+      await DatabaseHelper.instance.getWordsByModule(widget.module.id!);
 
       if (words.length < 4) {
         _showError('El módulo necesita al menos 4 palabras para evaluación');
         return;
       }
 
-      // Mezclar palabras
       words.shuffle(Random());
 
-      // Tomar 5 preguntas (o todas si hay menos de 5)
       final questionCount = min(5, words.length);
       final selectedWords = words.take(questionCount).toList();
 
       final questions = <QuestionModel>[];
 
       for (var correctWord in selectedWords) {
-        // Generar opciones incorrectas
         final incorrectWords = words
             .where((w) => w.id != correctWord.id)
             .toList()
@@ -90,9 +91,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
   void _nextQuestion() {
     if (_currentQuestionIndex < _questions.length - 1) {
-      setState(() {
-        _currentQuestionIndex++;
-      });
+      setState(() => _currentQuestionIndex++);
     } else {
       _finishEvaluation();
     }
@@ -100,9 +99,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
   void _previousQuestion() {
     if (_currentQuestionIndex > 0) {
-      setState(() {
-        _currentQuestionIndex--;
-      });
+      setState(() => _currentQuestionIndex--);
     }
   }
 
@@ -113,7 +110,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
     final evaluation = EvaluationModel(
       moduleId: widget.module.id!,
-      userId: 1, // TODO: Obtener del usuario actual
+      userId: 1,
       correctAnswers: correctAnswers,
       totalQuestions: totalQuestions,
       percentage: percentage,
@@ -122,10 +119,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
     await DatabaseHelper.instance.insertEvaluation(evaluation);
 
-    setState(() {
-      _isEvaluationComplete = true;
-    });
-
+    setState(() => _isEvaluationComplete = true);
     _navigateToResults(evaluation);
   }
 
@@ -152,31 +146,20 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     Navigator.pop(context);
   }
 
-  Color _getModuleColor() {
-    switch (widget.module.id) {
-      case 1:
-        return AppColors.primary;
-      case 2:
-        return AppColors.secondary;
-      case 3:
-        return AppColors.accent;
-      default:
-        return AppColors.primary;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_questions.isEmpty) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: const Center(
           child: Text('No hay preguntas disponibles'),
         ),
@@ -187,9 +170,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     final progress = (_currentQuestionIndex + 1) / _questions.length;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: _getModuleColor(),
+        backgroundColor: _moduleColor,
         foregroundColor: AppColors.textLight,
         title: Text(
           'Evaluación: ${widget.module.name}',
@@ -207,9 +190,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                 children: [
                   _buildQuestionCounter(),
                   const SizedBox(height: 24),
-                  _buildQuestionCard(currentQuestion),
+                  _buildQuestionCard(currentQuestion, isDark),
                   const SizedBox(height: 24),
-                  _buildOptionsGrid(currentQuestion),
+                  _buildOptionsGrid(currentQuestion, isDark),
                   const SizedBox(height: 32),
                   _buildNavigationButtons(),
                 ],
@@ -224,7 +207,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   Widget _buildProgressBar(double progress) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      color: _getModuleColor(),
+      color: _moduleColor,
       child: Column(
         children: [
           Row(
@@ -261,7 +244,6 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   }
 
   Widget _buildQuestionCounter() {
-    final answered = _questions.where((q) => q.isAnswered).length;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(_questions.length, (index) {
@@ -277,7 +259,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             color: isAnswered
                 ? AppColors.success
                 : isCurrent
-                ? _getModuleColor()
+                ? _moduleColor
                 : AppColors.textSecondary.withOpacity(0.3),
           ),
         );
@@ -285,9 +267,10 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     );
   }
 
-  Widget _buildQuestionCard(QuestionModel question) {
+  Widget _buildQuestionCard(QuestionModel question, bool isDark) {
     return Card(
       elevation: 4,
+      color: isDark ? Theme.of(context).cardColor : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -299,8 +282,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              _getModuleColor().withOpacity(0.1),
-              _getModuleColor().withOpacity(0.05),
+              _moduleColor.withOpacity(isDark ? 0.2 : 0.1),
+              _moduleColor.withOpacity(isDark ? 0.1 : 0.05),
             ],
           ),
         ),
@@ -309,23 +292,21 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             Text(
               '¿Qué significa en español?',
               style: AppTextStyles.bodyLarge.copyWith(
-                color: AppColors.textSecondary,
+                color: isDark ? Colors.white60 : AppColors.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             Text(
               question.correctWord.wordQuechua,
-              style: AppTextStyles.h1.copyWith(
-                color: _getModuleColor(),
-              ),
+              style: AppTextStyles.h1.copyWith(color: _moduleColor),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               question.correctWord.phonetic,
               style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
+                color: isDark ? Colors.white54 : AppColors.textSecondary,
                 fontStyle: FontStyle.italic,
               ),
               textAlign: TextAlign.center,
@@ -336,7 +317,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     );
   }
 
-  Widget _buildOptionsGrid(QuestionModel question) {
+  Widget _buildOptionsGrid(QuestionModel question, bool isDark) {
     return Column(
       children: question.options.map((option) {
         final isSelected = question.selectedAnswer == option;
@@ -351,11 +332,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? _getModuleColor().withOpacity(0.1)
-                    : AppColors.surface,
+                    ? _moduleColor.withOpacity(isDark ? 0.2 : 0.1)
+                    : (isDark ? Theme.of(context).cardColor : AppColors.surface),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? _getModuleColor() : Colors.transparent,
+                  color: isSelected ? _moduleColor : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -368,18 +349,15 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: isSelected
-                            ? _getModuleColor()
+                            ? _moduleColor
                             : AppColors.textSecondary,
                         width: 2,
                       ),
-                      color: isSelected ? _getModuleColor() : Colors.transparent,
+                      color: isSelected ? _moduleColor : Colors.transparent,
                     ),
                     child: isSelected
-                        ? const Icon(
-                      Icons.check,
-                      size: 16,
-                      color: Colors.white,
-                    )
+                        ? const Icon(Icons.check,
+                        size: 16, color: Colors.white)
                         : null,
                   ),
                   const SizedBox(width: 16),
@@ -387,10 +365,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     child: Text(
                       option,
                       style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                         color: isSelected
-                            ? _getModuleColor()
-                            : AppColors.textPrimary,
+                            ? _moduleColor
+                            : (isDark ? Colors.white : AppColors.textPrimary),
                       ),
                     ),
                   ),
@@ -410,7 +389,6 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
     return Column(
       children: [
-        // Mensaje si no ha respondido
         if (!canProceed)
           Container(
             width: double.infinity,
@@ -427,12 +405,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               ),
             ),
           ),
-
-        // Botones en horizontal
         if (canProceed) ...[
           Row(
             children: [
-              // Botón Anterior (solo si no es la primera)
               if (!isFirstQuestion)
                 Expanded(
                   child: SizedBox(
@@ -442,8 +417,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                       icon: const Icon(Icons.arrow_back),
                       label: const Text('Anterior'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: _getModuleColor(),
-                        side: BorderSide(color: _getModuleColor()),
+                        foregroundColor: _moduleColor,
+                        side: BorderSide(color: _moduleColor),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -451,24 +426,21 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     ),
                   ),
                 ),
-
-              // Espaciado entre botones
               if (!isFirstQuestion) const SizedBox(width: 12),
-
-              // Botón Siguiente/Finalizar
               Expanded(
-                flex: isFirstQuestion ? 1 : 1,
                 child: SizedBox(
                   height: 56,
                   child: ElevatedButton.icon(
-                    onPressed: isLastQuestion ? _finishEvaluation : _nextQuestion,
-                    icon: Icon(isLastQuestion ? Icons.check : Icons.arrow_forward),
+                    onPressed:
+                    isLastQuestion ? _finishEvaluation : _nextQuestion,
+                    icon: Icon(
+                        isLastQuestion ? Icons.check : Icons.arrow_forward),
                     label: Text(
                       isLastQuestion ? 'Finalizar' : 'Siguiente',
                       style: AppTextStyles.button,
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _getModuleColor(),
+                      backgroundColor: _moduleColor,
                       foregroundColor: AppColors.textLight,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
