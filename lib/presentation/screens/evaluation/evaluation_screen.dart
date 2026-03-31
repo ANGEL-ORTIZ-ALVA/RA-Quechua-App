@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'package:audioplayers/audioplayers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
-import '../../../core/constants/app_routes.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/word_model.dart';
 import '../../../data/models/module_model.dart';
@@ -12,10 +12,12 @@ import 'results_screen.dart';
 
 class EvaluationScreen extends StatefulWidget {
   final ModuleModel module;
+  final QuestionType? filterType; // null = mixto
 
   const EvaluationScreen({
     super.key,
     required this.module,
+    this.filterType,
   });
 
   @override
@@ -26,15 +28,61 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   List<QuestionModel> _questions = [];
   int _currentQuestionIndex = 0;
   bool _isLoading = true;
-  bool _isEvaluationComplete = false;
 
-  /// Color centralizado
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlayingAudio = false;
+
   Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+
+  String _getFilterLabel() {
+    switch (widget.filterType) {
+      case QuestionType.quechuaToSpanish:
+        return 'Q → E';
+      case QuestionType.spanishToQuechua:
+        return 'E → Q';
+      case QuestionType.audioToSpanish:
+        return 'Audio';
+      default:
+        return 'Mixto';
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _generateQuestions();
+    _setupAudioListeners();
+  }
+
+  void _setupAudioListeners() {
+    _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
+      if (mounted) {
+        setState(() => _isPlayingAudio = state == PlayerState.playing);
+      }
+    });
+    _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _isPlayingAudio = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playQuestionAudio(String? audioUrl) async {
+    if (audioUrl == null || audioUrl.isEmpty) return;
+    try {
+      if (_isPlayingAudio) {
+        await _audioPlayer.stop();
+        return;
+      }
+      setState(() => _isPlayingAudio = true);
+      await _audioPlayer.play(UrlSource(audioUrl));
+    } catch (e) {
+      if (mounted) setState(() => _isPlayingAudio = false);
+    }
   }
 
   Future<void> _generateQuestions() async {
@@ -48,28 +96,60 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
       }
 
       words.shuffle(Random());
-
       final questionCount = min(5, words.length);
       final selectedWords = words.take(questionCount).toList();
+      final random = Random();
+
+      // Verificar si el módulo tiene audios disponibles
+      final hasAudio =
+      words.any((w) => w.audioPath != null && w.audioPath!.isNotEmpty);
+
+      // Si hay filtro, usar solo ese tipo; si no, mezclar todos los disponibles
+      final availableTypes = widget.filterType != null
+          ? [widget.filterType!]
+          : [
+        QuestionType.quechuaToSpanish,
+        QuestionType.spanishToQuechua,
+        if (hasAudio) QuestionType.audioToSpanish,
+      ];
+
+      // Si el filtro es audio pero no hay audios, fallback a mixto
+      final effectiveTypes = availableTypes.isEmpty
+          ? [QuestionType.quechuaToSpanish]
+          : availableTypes;
 
       final questions = <QuestionModel>[];
 
       for (var correctWord in selectedWords) {
+        final type = effectiveTypes[random.nextInt(effectiveTypes.length)];
+
         final incorrectWords = words
             .where((w) => w.id != correctWord.id)
             .toList()
-          ..shuffle(Random());
+          ..shuffle(random);
 
-        final options = [
-          correctWord.wordSpanish,
-          incorrectWords[0].wordSpanish,
-          incorrectWords[1].wordSpanish,
-          incorrectWords[2].wordSpanish,
-        ]..shuffle(Random());
+        List<String> options;
+
+        if (type == QuestionType.spanishToQuechua) {
+          options = [
+            correctWord.wordQuechua,
+            incorrectWords[0].wordQuechua,
+            incorrectWords[1].wordQuechua,
+            incorrectWords[2].wordQuechua,
+          ]..shuffle(random);
+        } else {
+          options = [
+            correctWord.wordSpanish,
+            incorrectWords[0].wordSpanish,
+            incorrectWords[1].wordSpanish,
+            incorrectWords[2].wordSpanish,
+          ]..shuffle(random);
+        }
 
         questions.add(QuestionModel(
           correctWord: correctWord,
           options: options,
+          type: type,
         ));
       }
 
@@ -84,12 +164,14 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   }
 
   void _selectAnswer(String answer) {
+    if (_isPlayingAudio) _audioPlayer.stop();
     setState(() {
       _questions[_currentQuestionIndex].selectedAnswer = answer;
     });
   }
 
   void _nextQuestion() {
+    if (_isPlayingAudio) _audioPlayer.stop();
     if (_currentQuestionIndex < _questions.length - 1) {
       setState(() => _currentQuestionIndex++);
     } else {
@@ -98,12 +180,15 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   }
 
   void _previousQuestion() {
+    if (_isPlayingAudio) _audioPlayer.stop();
     if (_currentQuestionIndex > 0) {
       setState(() => _currentQuestionIndex--);
     }
   }
 
   Future<void> _finishEvaluation() async {
+    if (_isPlayingAudio) _audioPlayer.stop();
+
     final correctAnswers = _questions.where((q) => q.isCorrect).length;
     final totalQuestions = _questions.length;
     final percentage = (correctAnswers / totalQuestions) * 100;
@@ -119,11 +204,6 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
     await DatabaseHelper.instance.insertEvaluation(evaluation);
 
-    setState(() => _isEvaluationComplete = true);
-    _navigateToResults(evaluation);
-  }
-
-  void _navigateToResults(EvaluationModel evaluation) {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -131,6 +211,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
           evaluation: evaluation,
           module: widget.module,
           questions: _questions,
+          filterType: widget.filterType,
         ),
       ),
     );
@@ -138,10 +219,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: AppColors.error,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
     Navigator.pop(context);
   }
@@ -160,9 +238,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     if (_questions.isEmpty) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: const Center(
-          child: Text('No hay preguntas disponibles'),
-        ),
+        body: const Center(child: Text('No hay preguntas disponibles')),
       );
     }
 
@@ -175,8 +251,11 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         backgroundColor: _moduleColor,
         foregroundColor: AppColors.textLight,
         title: Text(
-          'Evaluación: ${widget.module.name}',
+          widget.filterType != null
+              ? '${widget.module.name}: ${_getFilterLabel()}'
+              : 'Evaluación: ${widget.module.name}',
           style: AppTextStyles.h3.copyWith(color: AppColors.textLight),
+          overflow: TextOverflow.ellipsis,
         ),
       ),
       body: Column(
@@ -215,9 +294,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             children: [
               Text(
                 'Pregunta ${_currentQuestionIndex + 1} de ${_questions.length}',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textLight,
-                ),
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textLight),
               ),
               Text(
                 '${(progress * 100).toInt()}%',
@@ -249,7 +327,6 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
       children: List.generate(_questions.length, (index) {
         final isAnswered = _questions[index].isAnswered;
         final isCurrent = index == _currentQuestionIndex;
-
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
           width: 12,
@@ -267,13 +344,12 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     );
   }
 
+  // ─── TARJETA DE PREGUNTA: DIFERENTE SEGÚN TIPO ───
   Widget _buildQuestionCard(QuestionModel question, bool isDark) {
     return Card(
       elevation: 4,
       color: isDark ? Theme.of(context).cardColor : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -289,39 +365,119 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         ),
         child: Column(
           children: [
+            // Chip del tipo de pregunta
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: _moduleColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _getTypeChip(question.type),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: _moduleColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Instrucción
             Text(
-              '¿Qué significa en español?',
+              question.typeLabel,
               style: AppTextStyles.bodyLarge.copyWith(
                 color: isDark ? Colors.white60 : AppColors.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            Text(
-              question.correctWord.wordQuechua,
-              style: AppTextStyles.h1.copyWith(color: _moduleColor),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              question.correctWord.phonetic,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: isDark ? Colors.white54 : AppColors.textSecondary,
-                fontStyle: FontStyle.italic,
+
+            // ─── CONTENIDO SEGÚN TIPO ───
+            if (question.type == QuestionType.audioToSpanish) ...[
+              GestureDetector(
+                onTap: () =>
+                    _playQuestionAudio(question.correctWord.audioPath),
+                child: Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: _isPlayingAudio
+                        ? _moduleColor
+                        : _moduleColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                    boxShadow: _isPlayingAudio
+                        ? [
+                      BoxShadow(
+                        color: _moduleColor.withOpacity(0.4),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                        : null,
+                  ),
+                  child: Icon(
+                    _isPlayingAudio
+                        ? Icons.stop_rounded
+                        : Icons.volume_up_rounded,
+                    color: _isPlayingAudio ? Colors.white : _moduleColor,
+                    size: 48,
+                  ),
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
+              const SizedBox(height: 12),
+              Text(
+                _isPlayingAudio ? 'Reproduciendo...' : 'Toca para escuchar',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: isDark ? Colors.white38 : AppColors.textSecondary,
+                ),
+              ),
+            ] else if (question.type == QuestionType.spanishToQuechua) ...[
+              Text(
+                question.correctWord.wordSpanish,
+                style: AppTextStyles.h1.copyWith(
+                  color: _moduleColor,
+                  fontSize: 36,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ] else ...[
+              Text(
+                question.correctWord.wordQuechua,
+                style: AppTextStyles.h1.copyWith(color: _moduleColor),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                question.correctWord.phonetic,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: isDark ? Colors.white54 : AppColors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
+  String _getTypeChip(QuestionType type) {
+    switch (type) {
+      case QuestionType.quechuaToSpanish:
+        return 'Quechua → Español';
+      case QuestionType.spanishToQuechua:
+        return 'Español → Quechua';
+      case QuestionType.audioToSpanish:
+        return '🔊 Audio → Español';
+    }
+  }
+
   Widget _buildOptionsGrid(QuestionModel question, bool isDark) {
     return Column(
       children: question.options.map((option) {
         final isSelected = question.selectedAnswer == option;
-
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: InkWell(
@@ -333,7 +489,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               decoration: BoxDecoration(
                 color: isSelected
                     ? _moduleColor.withOpacity(isDark ? 0.2 : 0.1)
-                    : (isDark ? Theme.of(context).cardColor : AppColors.surface),
+                    : (isDark
+                    ? Theme.of(context).cardColor
+                    : AppColors.surface),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isSelected ? _moduleColor : Colors.transparent,
@@ -365,8 +523,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     child: Text(
                       option,
                       style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight:
-                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.normal,
                         color: isSelected
                             ? _moduleColor
                             : (isDark ? Colors.white : AppColors.textPrimary),
@@ -400,9 +559,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             ),
             child: Text(
               'Selecciona una respuesta para continuar',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.textSecondary,
-              ),
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
             ),
           ),
         if (canProceed) ...[

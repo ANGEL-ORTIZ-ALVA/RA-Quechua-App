@@ -287,7 +287,7 @@ class DatabaseHelper {
     final naturalezaWords = [
       {'quechua': 'Inti', 'spanish': 'Sol', 'phonetic': 'IN-ti', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FSol.jpg?alt=media&token=5c211b42-d40c-4735-bbf5-276f7de41af5', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Finti.mp3?alt=media&token=443566a4-5b84-4f3b-a589-293148e0d7ae', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Finti.glb?alt=media&token=31652247-040f-4f66-a2bd-8e64b7ed2626'},
       {'quechua': 'Killa', 'spanish': 'Luna', 'phonetic': 'KI-lla', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FLuna.jpg?alt=media&token=162d37ea-ad8c-4e74-92b3-f60cae76639b', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Fkilla.mp3?alt=media&token=04ac3569-e318-4f15-9223-981994fa9762', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Fkilla.glb?alt=media&token=460ec4f0-b1d3-4623-a927-b5e1555b726f'},
-      {'quechua': 'Urqu', 'spanish': 'Montana', 'phonetic': 'UR-qu', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FMonta%C3%B1a.jpg?alt=media&token=903d47f0-de4d-4dfb-870a-e9acee4409cf', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Furqu.mp3?alt=media&token=8b3d1c90-6763-4276-9cf9-8549805d7d29', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Furqu.glb?alt=media&token=426d4b1f-7e75-4912-a597-a825653c44bd'},
+      {'quechua': 'Urqu', 'spanish': 'Montaña', 'phonetic': 'UR-qu', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FMonta%C3%B1a.jpg?alt=media&token=903d47f0-de4d-4dfb-870a-e9acee4409cf', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Furqu.mp3?alt=media&token=8b3d1c90-6763-4276-9cf9-8549805d7d29', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Furqu.glb?alt=media&token=426d4b1f-7e75-4912-a597-a825653c44bd'},
       {'quechua': 'Yaku', 'spanish': 'Agua', 'phonetic': 'YA-ku', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FAgua.jpg?alt=media&token=9fe52f30-adea-4606-afb7-b7cd15374299', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Fyaku.mp3?alt=media&token=abc4d7c5-29ca-4284-9ca4-f4ea20469f1e', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Fyaku.glb?alt=media&token=bf32f02b-96d1-4fc6-b2a5-af6ff6430116'},
       {'quechua': 'Sacha', 'spanish': 'Arbol', 'phonetic': 'SA-cha', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2F%C3%81rbol.jpg?alt=media&token=d46ee95e-3881-4714-84b0-b2b37a6e6398', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Fsacha.mp3?alt=media&token=ab1b353c-0f12-4d01-bc9f-33cdb7a2fd8d', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Fsacha.glb?alt=media&token=139b75d8-30a3-4d60-977d-dce4e2923ae7'},
       {'quechua': 'Tika', 'spanish': 'Flor', 'phonetic': 'TI-ka', 'image_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/images%2Fnaturaleza%2FFlor.jpg?alt=media&token=49b200e8-0833-498c-9c4d-fdf710401f85', 'audio_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/audio%2Fnaturaleza%2Ftika.mp3?alt=media&token=463c11cb-e46a-40ec-a157-842501495ce9', 'model_3d_path': 'https://firebasestorage.googleapis.com/v0/b/ra-quechua-app.firebasestorage.app/o/models%2Fnaturaleza%2Ftika.glb?alt=media&token=787ae11f-7986-469e-9c1f-d7d80bcc7cad'},
@@ -452,6 +452,17 @@ class DatabaseHelper {
     final result = await db.query('evaluations', where: 'module_id = ?', whereArgs: [moduleId], orderBy: 'completed_at DESC', limit: 1);
     if (result.isEmpty) return null;
     return EvaluationModel.fromMap(result.first);
+  }
+
+  /// Devuelve la mejor evaluación (mayor porcentaje) de un módulo
+  Future<double> getBestEvaluationScore(int moduleId) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT MAX(percentage) as best FROM evaluations WHERE module_id = ? AND user_id = 1',
+      [moduleId],
+    );
+    if (result.isEmpty || result.first['best'] == null) return 0.0;
+    return (result.first['best'] as num).toDouble();
   }
 
   Future<bool> isWordLearned(int wordId) async {

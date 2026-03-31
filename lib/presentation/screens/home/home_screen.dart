@@ -20,6 +20,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   int _totalLearnedWords = 0;
   Map<int, int> _moduleProgress = {};
+  Map<int, double> _moduleEvalScores = {}; // moduleId -> mejor nota
+  int _masteredModulesCount = 0;
   int _streakDays = 0;
 
   @override
@@ -55,17 +57,30 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       int total = 0;
       Map<int, int> moduleProgressMap = {};
+      Map<int, double> evalScoresMap = {};
+      int mastered = 0;
 
       for (var module in _modules) {
         final learned =
         await DatabaseHelper.instance.getLearnedWordsCount(module.id!);
+        final bestScore =
+        await DatabaseHelper.instance.getBestEvaluationScore(module.id!);
+
         moduleProgressMap[module.id!] = learned;
+        evalScoresMap[module.id!] = bestScore;
         total += learned;
+
+        // Módulo dominado: ≥5 palabras aprendidas Y ≥70% en evaluación
+        if (learned >= 5 && bestScore >= 70) {
+          mastered++;
+        }
       }
 
       setState(() {
         _totalLearnedWords = total;
         _moduleProgress = moduleProgressMap;
+        _moduleEvalScores = evalScoresMap;
+        _masteredModulesCount = mastered;
         _isLoading = false;
       });
 
@@ -119,22 +134,22 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Allin tuta';
   }
 
+  // ─── NIVEL BASADO EN MÓDULOS DOMINADOS ───
+  // Dominio = ≥5 palabras aprendidas + ≥70% en evaluación
   String _getLevelLabel() {
-    final totalWords = _modules.length * 10;
-    if (totalWords == 0) return 'Qallariq';
-    if (_totalLearnedWords >= (totalWords * 0.67).round()) return "Hamawt'a";
-    if (_totalLearnedWords >= (totalWords * 0.33).round()) return 'Yachaq';
-    return 'Qallariq';
+    if (_masteredModulesCount >= 4) return "Hamawt'a"; // Avanzado: 4-6 módulos
+    if (_masteredModulesCount >= 2) return 'Yachaq';   // Intermedio: 2-3 módulos
+    return 'Qallariq';                                  // Principiante: 0-1 módulos
   }
 
   String _getLevelSubtitle() {
     switch (_getLevelLabel()) {
       case 'Qallariq':
-        return 'Principiante';
+        return 'Principiante · $_masteredModulesCount/${_modules.length} módulos';
       case 'Yachaq':
-        return 'Intermedio';
+        return 'Intermedio · $_masteredModulesCount/${_modules.length} módulos';
       case "Hamawt'a":
-        return 'Avanzado';
+        return 'Avanzado · $_masteredModulesCount/${_modules.length} módulos';
       default:
         return '';
     }
@@ -400,6 +415,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final color = AppColors.getModuleColor(module.id ?? 1);
       final icon = AppColors.getModuleIcon(module.icon);
       final learnedWords = _moduleProgress[module.id] ?? 0;
+      final bestScore = _moduleEvalScores[module.id] ?? 0.0;
+      final isMastered = learnedWords >= 5 && bestScore >= 70;
+      final isCompleted = learnedWords >= 10 && bestScore >= 70;
       final progress = learnedWords / 10.0;
 
       return Padding(
@@ -410,6 +428,9 @@ class _HomeScreenState extends State<HomeScreen> {
           color: color,
           progress: progress,
           learnedWords: learnedWords,
+          bestScore: bestScore,
+          isMastered: isMastered,
+          isCompleted: isCompleted,
           isDark: isDark,
           onTap: () async {
             await Navigator.push(
@@ -431,6 +452,9 @@ class _HomeScreenState extends State<HomeScreen> {
     required Color color,
     required double progress,
     required int learnedWords,
+    required double bestScore,
+    required bool isMastered,
+    required bool isCompleted,
     required bool isDark,
     required VoidCallback onTap,
   }) {
@@ -443,22 +467,55 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark
+            color: isCompleted
+                ? AppColors.success.withOpacity(0.6)
+                : isMastered
+                ? AppColors.success.withOpacity(0.3)
+                : isDark
                 ? Colors.white.withOpacity(0.08)
                 : AppColors.progressBackground,
-            width: 1,
+            width: isCompleted ? 2 : 1,
           ),
         ),
         child: Row(
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: color.withOpacity(isDark ? 0.2 : 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 28),
+            // Ícono del módulo con indicador de estado
+            Stack(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(isDark ? 0.2 : 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                // Solo check verde si dominado, trofeo si completado
+                if (isMastered)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? AppColors.secondary
+                            : AppColors.success,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).cardColor,
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        isCompleted ? Icons.emoji_events : Icons.check,
+                        color: Colors.white,
+                        size: 12,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -480,18 +537,48 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Palabras + mejor evaluación
                   Row(
                     children: [
                       Icon(Icons.book_outlined,
-                          size: 16,
-                          color: isDark
+                          size: 14,
+                          color: learnedWords >= 10
+                              ? AppColors.success
+                              : (isDark
                               ? Colors.white54
-                              : AppColors.textSecondary),
+                              : AppColors.textSecondary)),
                       const SizedBox(width: 4),
                       Text(
-                        '$learnedWords/10 palabras',
+                        '$learnedWords/10',
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: isDark ? Colors.white54 : null,
+                          color: learnedWords >= 10
+                              ? AppColors.success
+                              : (isDark ? Colors.white54 : null),
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(
+                        Icons.quiz_outlined,
+                        size: 14,
+                        color: bestScore >= 70
+                            ? AppColors.success
+                            : (isDark
+                            ? Colors.white54
+                            : AppColors.textSecondary),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        bestScore > 0
+                            ? '${bestScore.toInt()}%'
+                            : 'Sin evaluar',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: bestScore >= 70
+                              ? AppColors.success
+                              : (isDark
+                              ? Colors.white54
+                              : AppColors.textSecondary),
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -511,9 +598,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios,
-                size: 20,
-                color: isDark ? Colors.white38 : AppColors.textSecondary),
+            // Flecha normal, o trofeo si completado
+            Icon(
+              isCompleted
+                  ? Icons.emoji_events
+                  : Icons.arrow_forward_ios,
+              size: 20,
+              color: isCompleted
+                  ? AppColors.secondary
+                  : (isDark ? Colors.white38 : AppColors.textSecondary),
+            ),
           ],
         ),
       ),

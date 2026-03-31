@@ -5,32 +5,36 @@ import '../../../data/models/evaluation_model.dart';
 import '../../../data/models/module_model.dart';
 import '../../../data/models/question_model.dart';
 import 'evaluation_screen.dart';
-import '../modules/module_screen.dart';  // ← AGREGAR ESTO
+import '../modules/module_screen.dart';
 
 class ResultsScreen extends StatelessWidget {
   final EvaluationModel evaluation;
   final ModuleModel module;
-  final List<QuestionModel> questions; // ← NUEVO
+  final List<QuestionModel> questions;
+  final QuestionType? filterType;
 
   const ResultsScreen({
     super.key,
     required this.evaluation,
     required this.module,
-    required this.questions, // ← NUEVO
+    required this.questions,
+    this.filterType,
   });
+
+  Color get _moduleColor => AppColors.getModuleColor(module.id ?? 1);
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: _getResultColor(),
         foregroundColor: AppColors.textLight,
         title: Text(
           'Resultados',
-          style: AppTextStyles.h3.copyWith(
-            color: AppColors.textLight,
-          ),
+          style: AppTextStyles.h3.copyWith(color: AppColors.textLight),
         ),
         automaticallyImplyLeading: false,
       ),
@@ -39,13 +43,13 @@ class ResultsScreen extends StatelessWidget {
           children: [
             _buildHeader(context),
             const SizedBox(height: 24),
-            _buildScoreCard(context),
+            _buildScoreCard(context, isDark),
             const SizedBox(height: 24),
-            _buildDetailsCard(context),
+            _buildDetailsCard(context, isDark),
             const SizedBox(height: 24),
-            _buildQuestionsReview(context), // ← NUEVO
+            _buildQuestionsReview(context, isDark),
             const SizedBox(height: 24),
-            _buildFeedbackCard(context),
+            _buildFeedbackCard(context, isDark),
             const SizedBox(height: 32),
             _buildActions(context),
             const SizedBox(height: 24),
@@ -71,11 +75,7 @@ class ResultsScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(
-            _getResultIcon(),
-            size: 80,
-            color: AppColors.textLight,
-          ),
+          Icon(_getResultIcon(), size: 80, color: AppColors.textLight),
           const SizedBox(height: 16),
           Text(
             evaluation.grade,
@@ -98,21 +98,22 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildScoreCard(BuildContext context) {
+  Widget _buildScoreCard(BuildContext context, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        color: isDark ? Theme.of(context).cardColor : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
               Text(
                 'Tu Puntuación',
-                style: AppTextStyles.h3,
+                style: AppTextStyles.h3.copyWith(
+                  color: isDark ? Colors.white : null,
+                ),
               ),
               const SizedBox(height: 24),
               Stack(
@@ -124,8 +125,11 @@ class ResultsScreen extends StatelessWidget {
                     child: CircularProgressIndicator(
                       value: evaluation.percentage / 100,
                       strokeWidth: 12,
-                      backgroundColor: AppColors.progressBackground,
-                      valueColor: AlwaysStoppedAnimation<Color>(_getResultColor()),
+                      backgroundColor: isDark
+                          ? Colors.white.withOpacity(0.1)
+                          : AppColors.progressBackground,
+                      valueColor:
+                      AlwaysStoppedAnimation<Color>(_getResultColor()),
                     ),
                   ),
                   Column(
@@ -140,7 +144,9 @@ class ResultsScreen extends StatelessWidget {
                       Text(
                         '${evaluation.correctAnswers}/${evaluation.totalQuestions}',
                         style: AppTextStyles.bodyLarge.copyWith(
-                          color: AppColors.textSecondary,
+                          color: isDark
+                              ? Colors.white54
+                              : AppColors.textSecondary,
                         ),
                       ),
                     ],
@@ -154,14 +160,13 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailsCard(BuildContext context) {
+  Widget _buildDetailsCard(BuildContext context, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Card(
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        color: isDark ? Theme.of(context).cardColor : null,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -171,20 +176,24 @@ class ResultsScreen extends StatelessWidget {
                 label: 'Respuestas correctas',
                 value: '${evaluation.correctAnswers}',
                 color: AppColors.success,
+                isDark: isDark,
               ),
-              const Divider(height: 24),
+              Divider(height: 24, color: isDark ? Colors.white12 : null),
               _buildDetailRow(
                 icon: Icons.cancel,
                 label: 'Respuestas incorrectas',
-                value: '${evaluation.totalQuestions - evaluation.correctAnswers}',
+                value:
+                '${evaluation.totalQuestions - evaluation.correctAnswers}',
                 color: AppColors.error,
+                isDark: isDark,
               ),
-              const Divider(height: 24),
+              Divider(height: 24, color: isDark ? Colors.white12 : null),
               _buildDetailRow(
                 icon: Icons.quiz,
                 label: 'Total de preguntas',
                 value: '${evaluation.totalQuestions}',
                 color: AppColors.info,
+                isDark: isDark,
               ),
             ],
           ),
@@ -198,13 +207,14 @@ class ResultsScreen extends StatelessWidget {
     required String label,
     required String value,
     required Color color,
+    required bool isDark,
   }) {
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withOpacity(isDark ? 0.2 : 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 24),
@@ -213,21 +223,18 @@ class ResultsScreen extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: AppTextStyles.bodyLarge,
+            style: AppTextStyles.bodyLarge.copyWith(
+              color: isDark ? Colors.white : null,
+            ),
           ),
         ),
-        Text(
-          value,
-          style: AppTextStyles.h3.copyWith(
-            color: color,
-          ),
-        ),
+        Text(value, style: AppTextStyles.h3.copyWith(color: color)),
       ],
     );
   }
 
-  // ← NUEVO: Mostrar revisión de preguntas
-  Widget _buildQuestionsReview(BuildContext context) {
+  // ─── REVISIÓN DE RESPUESTAS CON TIPO DE PREGUNTA ───
+  Widget _buildQuestionsReview(BuildContext context, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -235,7 +242,9 @@ class ResultsScreen extends StatelessWidget {
         children: [
           Text(
             'Revisión de Respuestas',
-            style: AppTextStyles.h3,
+            style: AppTextStyles.h3.copyWith(
+              color: isDark ? Colors.white : null,
+            ),
           ),
           const SizedBox(height: 16),
           ...questions.asMap().entries.map((entry) {
@@ -247,6 +256,7 @@ class ResultsScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 12),
               child: Card(
                 elevation: 2,
+                color: isDark ? Theme.of(context).cardColor : null,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
@@ -259,6 +269,7 @@ class ResultsScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Encabezado: número + tipo de pregunta
                       Row(
                         children: [
                           Container(
@@ -281,44 +292,94 @@ class ResultsScreen extends StatelessWidget {
                               'Pregunta ${index + 1}',
                               style: AppTextStyles.bodyMedium.copyWith(
                                 fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : null,
+                              ),
+                            ),
+                          ),
+                          // Chip del tipo
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _moduleColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _getShortTypeLabel(question.type),
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: _moduleColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      // Palabra en Quechua
-                      Text(
-                        question.correctWord.wordQuechua,
-                        style: AppTextStyles.h3.copyWith(
-                          color: AppColors.primary,
+
+                      // Palabra mostrada en la pregunta
+                      if (question.type == QuestionType.audioToSpanish) ...[
+                        Row(
+                          children: [
+                            Icon(Icons.volume_up_rounded,
+                                color: _moduleColor, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              question.correctWord.wordQuechua,
+                              style: AppTextStyles.h3.copyWith(
+                                color: _moduleColor,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ] else if (question.type ==
+                          QuestionType.spanishToQuechua) ...[
+                        Text(
+                          question.correctWord.wordSpanish,
+                          style: AppTextStyles.h3.copyWith(
+                            color: _moduleColor,
+                          ),
+                        ),
+                      ] else ...[
+                        Text(
+                          question.correctWord.wordQuechua,
+                          style: AppTextStyles.h3.copyWith(
+                            color: _moduleColor,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 4),
                       Text(
                         question.correctWord.phonetic,
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
+                          color: isDark
+                              ? Colors.white38
+                              : AppColors.textSecondary,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Divider(),
+                      Divider(color: isDark ? Colors.white12 : null),
                       const SizedBox(height: 8),
+
                       // Respuesta del usuario
                       if (question.selectedAnswer != null) ...[
                         Row(
                           children: [
                             Icon(
                               isCorrect ? Icons.check_circle : Icons.cancel,
-                              color: isCorrect ? AppColors.success : AppColors.error,
+                              color: isCorrect
+                                  ? AppColors.success
+                                  : AppColors.error,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'Tu respuesta:',
                               style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
+                                color: isDark
+                                    ? Colors.white54
+                                    : AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -327,32 +388,34 @@ class ResultsScreen extends StatelessWidget {
                         Text(
                           question.selectedAnswer!,
                           style: AppTextStyles.bodyLarge.copyWith(
-                            color: isCorrect ? AppColors.success : AppColors.error,
+                            color: isCorrect
+                                ? AppColors.success
+                                : AppColors.error,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
-                      // Respuesta correcta (siempre mostrar)
+
+                      // Respuesta correcta
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(
-                            Icons.lightbulb_outline,
-                            color: AppColors.success,
-                            size: 20,
-                          ),
+                          Icon(Icons.lightbulb_outline,
+                              color: AppColors.success, size: 20),
                           const SizedBox(width: 8),
                           Text(
                             'Respuesta correcta:',
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textSecondary,
+                              color: isDark
+                                  ? Colors.white54
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        question.correctWord.wordSpanish,
+                        question.correctAnswer,
                         style: AppTextStyles.bodyLarge.copyWith(
                           color: AppColors.success,
                           fontWeight: FontWeight.w600,
@@ -369,7 +432,18 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFeedbackCard(BuildContext context) {
+  String _getShortTypeLabel(QuestionType type) {
+    switch (type) {
+      case QuestionType.quechuaToSpanish:
+        return 'Q → E';
+      case QuestionType.spanishToQuechua:
+        return 'E → Q';
+      case QuestionType.audioToSpanish:
+        return '🔊 → E';
+    }
+  }
+
+  Widget _buildFeedbackCard(BuildContext context, bool isDark) {
     final feedback = _getFeedbackMessage();
 
     return Padding(
@@ -377,7 +451,7 @@ class ResultsScreen extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: _getResultColor().withOpacity(0.1),
+          color: _getResultColor().withOpacity(isDark ? 0.15 : 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _getResultColor().withOpacity(0.3),
@@ -386,17 +460,14 @@ class ResultsScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.lightbulb_outline,
-              color: _getResultColor(),
-              size: 32,
-            ),
+            Icon(Icons.lightbulb_outline,
+                color: _getResultColor(), size: 32),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 feedback,
                 style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textPrimary,
+                  color: isDark ? Colors.white70 : AppColors.textPrimary,
                 ),
               ),
             ),
@@ -413,30 +484,29 @@ class ResultsScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Botón principal (según resultado)
           SizedBox(
             width: double.infinity,
             height: 56,
             child: ElevatedButton.icon(
-                onPressed: didPass
-                    ? () => Navigator.popUntil(context, (route) => route.isFirst)
-                    : () {
-                  // Regresar al módulo específico para repasar
-                  Navigator.popUntil(context, (route) => route.isFirst);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ModuleScreen(module: module),
-                    ),
-                  );
-                },
+              onPressed: didPass
+                  ? () =>
+                  Navigator.popUntil(context, (route) => route.isFirst)
+                  : () {
+                Navigator.popUntil(context, (route) => route.isFirst);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ModuleScreen(module: module),
+                  ),
+                );
+              },
               icon: Icon(didPass ? Icons.home : Icons.book),
               label: Text(
                 didPass ? 'Volver al Inicio' : 'Repasar Palabras',
                 style: AppTextStyles.button,
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
+                backgroundColor: _moduleColor,
                 foregroundColor: AppColors.textLight,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -445,8 +515,6 @@ class ResultsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Botón secundario
           SizedBox(
             width: double.infinity,
             height: 56,
@@ -457,16 +525,22 @@ class ResultsScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => EvaluationScreen(module: module),
+                    builder: (context) =>
+                        EvaluationScreen(
+                          module: module,
+                          filterType: filterType,
+                        ),
                   ),
                 );
               }
-                  : () => Navigator.popUntil(context, (route) => route.isFirst),
+                  : () =>
+                  Navigator.popUntil(context, (route) => route.isFirst),
               icon: Icon(didPass ? Icons.refresh : Icons.home),
-              label: Text(didPass ? 'Intentar de Nuevo' : 'Volver al Inicio'),
+              label:
+              Text(didPass ? 'Intentar de Nuevo' : 'Volver al Inicio'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: BorderSide(color: AppColors.primary),
+                foregroundColor: _moduleColor,
+                side: BorderSide(color: _moduleColor),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -477,6 +551,7 @@ class ResultsScreen extends StatelessWidget {
       ),
     );
   }
+
   Color _getResultColor() {
     if (evaluation.percentage >= 90) return AppColors.success;
     if (evaluation.percentage >= 70) return AppColors.info;
