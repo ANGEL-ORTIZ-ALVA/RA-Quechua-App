@@ -7,6 +7,12 @@ import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/module_model.dart';
 import '../modules/module_screen.dart';
 
+// Avatares predefinidos (misma lista que en profile_screen.dart)
+const List<String> kAvatarEmojis = [
+  '🦙', '🏔️', '🌞', '🦅', '🌽', '🎵',
+  '🌈', '🪶', '🏺', '⭐', '🔥', '🌺',
+];
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<int, double> _moduleEvalScores = {}; // moduleId -> mejor nota
   int _masteredModulesCount = 0;
   int _streakDays = 0;
+  int _avatarIndex = 0;
 
   @override
   void initState() {
@@ -41,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _userName = prefs.getString('user_name') ?? 'Usuario';
+      _avatarIndex = prefs.getInt('user_avatar') ?? 0;
     });
   }
 
@@ -124,6 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshProgress() async {
+    await _loadUserData(); // recarga nombre y avatar si cambiaron
     await _loadProgress();
   }
 
@@ -230,7 +239,12 @@ class _HomeScreenState extends State<HomeScreen> {
         CircleAvatar(
           radius: 28,
           backgroundColor: AppColors.primary.withOpacity(isDark ? 0.3 : 0.1),
-          child: Icon(Icons.person, size: 32, color: AppColors.primary),
+          child: Text(
+            _avatarIndex < kAvatarEmojis.length
+                ? kAvatarEmojis[_avatarIndex]
+                : kAvatarEmojis[0],
+            style: const TextStyle(fontSize: 28),
+          ),
         ),
       ],
     );

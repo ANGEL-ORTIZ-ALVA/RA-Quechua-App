@@ -6,6 +6,7 @@ import 'presentation/screens/splash/splash_screen.dart';
 import 'presentation/screens/onboarding/onboarding_screen.dart';
 import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/home/home_screen.dart';
+import 'presentation/screens/home/main_navigation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -65,7 +66,7 @@ class MyApp extends StatelessWidget {
         AppRoutes.splash: (context) => const SplashScreen(),
         AppRoutes.onboarding: (context) => const OnboardingScreen(),
         AppRoutes.register: (context) => const RegisterScreen(),
-        AppRoutes.home: (context) => const HomeScreen(),
+        AppRoutes.home: (context) => const MainNavigation(),
       },
     );
   }
