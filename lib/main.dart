@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_routes.dart';
 import 'presentation/screens/splash/splash_screen.dart';
@@ -29,6 +30,17 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Yachay Quechua',
       debugShowCheckedModeBanner: false,
+
+      // ─── Localización según idioma del sistema ───
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es'), // Español
+        Locale('en'), // Inglés (fallback)
+      ],
 
       // ─── Sigue el tema del sistema (claro/oscuro) ───
       themeMode: ThemeMode.system,

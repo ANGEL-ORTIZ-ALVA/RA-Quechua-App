@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/utils/streak_helper.dart';
+import '../../../core/utils/achievements_helper.dart';
 import '../../../data/models/evaluation_model.dart';
 import '../../../data/models/module_model.dart';
 import '../../../data/models/question_model.dart';
 import 'evaluation_screen.dart';
 import '../modules/module_screen.dart';
 
-class ResultsScreen extends StatelessWidget {
+class ResultsScreen extends StatefulWidget {
   final EvaluationModel evaluation;
   final ModuleModel module;
   final List<QuestionModel> questions;
@@ -21,7 +23,24 @@ class ResultsScreen extends StatelessWidget {
     this.filterType,
   });
 
-  Color get _moduleColor => AppColors.getModuleColor(module.id ?? 1);
+  @override
+  State<ResultsScreen> createState() => _ResultsScreenState();
+}
+
+class _ResultsScreenState extends State<ResultsScreen> {
+  Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+
+  @override
+  void initState() {
+    super.initState();
+    StreakHelper.recordActivity();
+    // Verificar logros con delay para que la UI se cargue primero
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        AchievementsHelper.checkAndNotify(context);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +97,7 @@ class ResultsScreen extends StatelessWidget {
           Icon(_getResultIcon(), size: 80, color: AppColors.textLight),
           const SizedBox(height: 16),
           Text(
-            evaluation.grade,
+            widget.evaluation.grade,
             style: AppTextStyles.h1.copyWith(
               color: AppColors.textLight,
               fontSize: 32,
@@ -87,7 +106,7 @@ class ResultsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            module.name,
+            widget.module.name,
             style: AppTextStyles.h3.copyWith(
               color: AppColors.textLight.withOpacity(0.9),
             ),
@@ -123,7 +142,7 @@ class ResultsScreen extends StatelessWidget {
                     width: 160,
                     height: 160,
                     child: CircularProgressIndicator(
-                      value: evaluation.percentage / 100,
+                      value: widget.evaluation.percentage / 100,
                       strokeWidth: 12,
                       backgroundColor: isDark
                           ? Colors.white.withOpacity(0.1)
@@ -135,14 +154,14 @@ class ResultsScreen extends StatelessWidget {
                   Column(
                     children: [
                       Text(
-                        '${evaluation.percentage.toInt()}%',
+                        '${widget.evaluation.percentage.toInt()}%',
                         style: AppTextStyles.h1.copyWith(
                           fontSize: 48,
                           color: _getResultColor(),
                         ),
                       ),
                       Text(
-                        '${evaluation.correctAnswers}/${evaluation.totalQuestions}',
+                        '${widget.evaluation.correctAnswers}/${widget.evaluation.totalQuestions}',
                         style: AppTextStyles.bodyLarge.copyWith(
                           color: isDark
                               ? Colors.white54
@@ -174,7 +193,7 @@ class ResultsScreen extends StatelessWidget {
               _buildDetailRow(
                 icon: Icons.check_circle,
                 label: 'Respuestas correctas',
-                value: '${evaluation.correctAnswers}',
+                value: '${widget.evaluation.correctAnswers}',
                 color: AppColors.success,
                 isDark: isDark,
               ),
@@ -183,7 +202,7 @@ class ResultsScreen extends StatelessWidget {
                 icon: Icons.cancel,
                 label: 'Respuestas incorrectas',
                 value:
-                '${evaluation.totalQuestions - evaluation.correctAnswers}',
+                '${widget.evaluation.totalQuestions - widget.evaluation.correctAnswers}',
                 color: AppColors.error,
                 isDark: isDark,
               ),
@@ -191,7 +210,7 @@ class ResultsScreen extends StatelessWidget {
               _buildDetailRow(
                 icon: Icons.quiz,
                 label: 'Total de preguntas',
-                value: '${evaluation.totalQuestions}',
+                value: '${widget.evaluation.totalQuestions}',
                 color: AppColors.info,
                 isDark: isDark,
               ),
@@ -233,7 +252,6 @@ class ResultsScreen extends StatelessWidget {
     );
   }
 
-  // ─── REVISIÓN DE RESPUESTAS CON TIPO DE PREGUNTA ───
   Widget _buildQuestionsReview(BuildContext context, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -247,7 +265,7 @@ class ResultsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          ...questions.asMap().entries.map((entry) {
+          ...widget.questions.asMap().entries.map((entry) {
             final index = entry.key;
             final question = entry.value;
             final isCorrect = question.isCorrect;
@@ -260,7 +278,8 @@ class ResultsScreen extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
-                    color: isCorrect ? AppColors.success : AppColors.error,
+                    color:
+                    isCorrect ? AppColors.success : AppColors.error,
                     width: 2,
                   ),
                 ),
@@ -269,7 +288,6 @@ class ResultsScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Encabezado: número + tipo de pregunta
                       Row(
                         children: [
                           Container(
@@ -296,7 +314,6 @@ class ResultsScreen extends StatelessWidget {
                               ),
                             ),
                           ),
-                          // Chip del tipo
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 2),
@@ -316,9 +333,8 @@ class ResultsScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      // Palabra mostrada en la pregunta
-                      if (question.type == QuestionType.audioToSpanish) ...[
+                      if (question.type ==
+                          QuestionType.audioToSpanish) ...[
                         Row(
                           children: [
                             Icon(Icons.volume_up_rounded,
@@ -361,13 +377,13 @@ class ResultsScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       Divider(color: isDark ? Colors.white12 : null),
                       const SizedBox(height: 8),
-
-                      // Respuesta del usuario
                       if (question.selectedAnswer != null) ...[
                         Row(
                           children: [
                             Icon(
-                              isCorrect ? Icons.check_circle : Icons.cancel,
+                              isCorrect
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
                               color: isCorrect
                                   ? AppColors.success
                                   : AppColors.error,
@@ -395,8 +411,6 @@ class ResultsScreen extends StatelessWidget {
                           ),
                         ),
                       ],
-
-                      // Respuesta correcta
                       const SizedBox(height: 8),
                       Row(
                         children: [
@@ -478,7 +492,7 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Widget _buildActions(BuildContext context) {
-    final didPass = evaluation.percentage >= 70;
+    final didPass = widget.evaluation.percentage >= 70;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -489,14 +503,16 @@ class ResultsScreen extends StatelessWidget {
             height: 56,
             child: ElevatedButton.icon(
               onPressed: didPass
-                  ? () =>
-                  Navigator.popUntil(context, (route) => route.isFirst)
+                  ? () => Navigator.popUntil(
+                  context, (route) => route.isFirst)
                   : () {
-                Navigator.popUntil(context, (route) => route.isFirst);
+                Navigator.popUntil(
+                    context, (route) => route.isFirst);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ModuleScreen(module: module),
+                    builder: (context) =>
+                        ModuleScreen(module: widget.module),
                   ),
                 );
               },
@@ -521,23 +537,23 @@ class ResultsScreen extends StatelessWidget {
             child: OutlinedButton.icon(
               onPressed: didPass
                   ? () {
-                Navigator.popUntil(context, (route) => route.isFirst);
+                Navigator.popUntil(
+                    context, (route) => route.isFirst);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
-                        EvaluationScreen(
-                          module: module,
-                          filterType: filterType,
-                        ),
+                    builder: (context) => EvaluationScreen(
+                      module: widget.module,
+                      filterType: widget.filterType,
+                    ),
                   ),
                 );
               }
-                  : () =>
-                  Navigator.popUntil(context, (route) => route.isFirst),
+                  : () => Navigator.popUntil(
+                  context, (route) => route.isFirst),
               icon: Icon(didPass ? Icons.refresh : Icons.home),
-              label:
-              Text(didPass ? 'Intentar de Nuevo' : 'Volver al Inicio'),
+              label: Text(
+                  didPass ? 'Intentar de Nuevo' : 'Volver al Inicio'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: _moduleColor,
                 side: BorderSide(color: _moduleColor),
@@ -553,25 +569,25 @@ class ResultsScreen extends StatelessWidget {
   }
 
   Color _getResultColor() {
-    if (evaluation.percentage >= 90) return AppColors.success;
-    if (evaluation.percentage >= 70) return AppColors.info;
-    if (evaluation.percentage >= 50) return AppColors.warning;
+    if (widget.evaluation.percentage >= 90) return AppColors.success;
+    if (widget.evaluation.percentage >= 70) return AppColors.info;
+    if (widget.evaluation.percentage >= 50) return AppColors.warning;
     return AppColors.error;
   }
 
   IconData _getResultIcon() {
-    if (evaluation.percentage >= 90) return Icons.emoji_events;
-    if (evaluation.percentage >= 70) return Icons.thumb_up;
-    if (evaluation.percentage >= 50) return Icons.sentiment_neutral;
+    if (widget.evaluation.percentage >= 90) return Icons.emoji_events;
+    if (widget.evaluation.percentage >= 70) return Icons.thumb_up;
+    if (widget.evaluation.percentage >= 50) return Icons.sentiment_neutral;
     return Icons.sentiment_dissatisfied;
   }
 
   String _getFeedbackMessage() {
-    if (evaluation.percentage >= 90) {
+    if (widget.evaluation.percentage >= 90) {
       return '¡Excelente trabajo! Dominas este módulo. Sigue así y continúa con el siguiente.';
-    } else if (evaluation.percentage >= 70) {
+    } else if (widget.evaluation.percentage >= 70) {
       return '¡Buen trabajo! Has aprobado. Repasa las palabras que fallaste para mejorar.';
-    } else if (evaluation.percentage >= 50) {
+    } else if (widget.evaluation.percentage >= 50) {
       return 'Regular. Te recomendamos repasar las lecciones antes de volver a intentarlo.';
     } else {
       return 'Necesitas más práctica. Repasa todas las palabras del módulo y vuelve a intentarlo.';

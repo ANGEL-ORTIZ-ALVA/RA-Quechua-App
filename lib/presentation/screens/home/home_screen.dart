@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_routes.dart';
+import '../../../core/utils/streak_helper.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/module_model.dart';
 import '../modules/module_screen.dart';
@@ -26,9 +27,11 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = true;
   int _totalLearnedWords = 0;
   Map<int, int> _moduleProgress = {};
-  Map<int, double> _moduleEvalScores = {}; // moduleId -> mejor nota
+  Map<int, double> _moduleEvalScores = {};
   int _masteredModulesCount = 0;
   int _streakDays = 0;
+  bool _streakWasLost = false;
+  int _previousStreak = 0;
   int _avatarIndex = 0;
 
   @override
@@ -41,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadUserData();
     await _loadModules();
     await _loadProgress();
-    await _updateStreak();
+    await _loadStreak();
   }
 
   Future<void> _loadUserData() async {
@@ -78,7 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
         evalScoresMap[module.id!] = bestScore;
         total += learned;
 
-        // Módulo dominado: ≥5 palabras aprendidas Y ≥70% en evaluación
         if (learned >= 5 && bestScore >= 70) {
           mastered++;
         }
@@ -100,40 +102,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ─── RACHA DE DÍAS CONSECUTIVOS ───
-  Future<void> _updateStreak() async {
-    final prefs = await SharedPreferences.getInstance();
-    final todayStr = _dateToString(DateTime.now());
-    final lastActiveDate = prefs.getString('last_active_date') ?? '';
-    final currentStreak = prefs.getInt('streak_count') ?? 0;
-
-    if (lastActiveDate == todayStr) {
-      setState(() => _streakDays = currentStreak);
-      return;
-    }
-
-    final yesterdayStr =
-    _dateToString(DateTime.now().subtract(const Duration(days: 1)));
-
-    int newStreak;
-    if (lastActiveDate == yesterdayStr) {
-      newStreak = currentStreak + 1;
-    } else {
-      newStreak = 1;
-    }
-
-    await prefs.setString('last_active_date', todayStr);
-    await prefs.setInt('streak_count', newStreak);
-    setState(() => _streakDays = newStreak);
-  }
-
-  String _dateToString(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  // ─── RACHA: SOLO LECTURA (no incrementa al abrir) ───
+  Future<void> _loadStreak() async {
+    final info = await StreakHelper.getStreakInfo();
+    setState(() {
+      _streakDays = info['streak'] as int;
+      _streakWasLost = info['wasLost'] as bool;
+      _previousStreak = info['previousStreak'] as int;
+    });
   }
 
   Future<void> _refreshProgress() async {
-    await _loadUserData(); // recarga nombre y avatar si cambiaron
+    await _loadUserData();
     await _loadProgress();
+    await _loadStreak();
   }
 
   String _getGreeting() {
@@ -143,12 +125,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Allin tuta';
   }
 
-  // ─── NIVEL BASADO EN MÓDULOS DOMINADOS ───
-  // Dominio = ≥5 palabras aprendidas + ≥70% en evaluación
   String _getLevelLabel() {
-    if (_masteredModulesCount >= 4) return "Hamawt'a"; // Avanzado: 4-6 módulos
-    if (_masteredModulesCount >= 2) return 'Yachaq';   // Intermedio: 2-3 módulos
-    return 'Qallariq';                                  // Principiante: 0-1 módulos
+    if (_masteredModulesCount >= 4) return "Hamawt'a";
+    if (_masteredModulesCount >= 2) return 'Yachaq';
+    return 'Qallariq';
   }
 
   String _getLevelSubtitle() {
@@ -206,6 +186,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader(bool isDark) {
+    final firstName = _userName.split(' ').first;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -214,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '¡${_getGreeting()}, $_userName!',
+                '¡${_getGreeting()}, $firstName!',
                 style: AppTextStyles.h2.copyWith(
                   color: isDark ? Colors.white : null,
                 ),
@@ -225,10 +207,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.star, size: 16, color: AppColors.secondary),
                   const SizedBox(width: 4),
-                  Text(
-                    '${_getLevelLabel()} · ${_getLevelSubtitle()}',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: isDark ? Colors.white70 : AppColors.textSecondary,
+                  Flexible(
+                    child: Text(
+                      '${_getLevelLabel()} · ${_getLevelSubtitle()}',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color:
+                        isDark ? Colors.white70 : AppColors.textSecondary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
@@ -236,9 +222,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+        const SizedBox(width: 12),
         CircleAvatar(
           radius: 28,
-          backgroundColor: AppColors.primary.withOpacity(isDark ? 0.3 : 0.1),
+          backgroundColor:
+          AppColors.primary.withOpacity(isDark ? 0.3 : 0.1),
           child: Text(
             _avatarIndex < kAvatarEmojis.length
                 ? kAvatarEmojis[_avatarIndex]
@@ -251,6 +239,38 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStreakCard(bool isDark) {
+    // Determinar emoji, mensaje y estilo según estado de racha
+    final String emoji;
+    final String title;
+    final String subtitle;
+    final Color accentColor;
+
+    if (_streakWasLost && _previousStreak > 1) {
+      // Racha perdida recientemente
+      emoji = '💔';
+      title = 'Racha perdida';
+      subtitle =
+      'Tenías $_previousStreak días. ¡Practica hoy para empezar una nueva!';
+      accentColor = AppColors.warning;
+    } else if (_streakDays == 0) {
+      // Sin racha activa
+      emoji = '❄️';
+      title = 'Sin racha activa';
+      subtitle = '¡Aprende una palabra o haz una evaluación para comenzar!';
+      accentColor = AppColors.info;
+    } else {
+      // Racha activa
+      emoji = '🔥';
+      title =
+      '$_streakDays ${_streakDays == 1 ? 'día' : 'días'} de racha';
+      subtitle = _streakDays >= 7
+          ? '¡Increíble constancia! Sigue así'
+          : _streakDays >= 3
+          ? '¡Vas muy bien! No pierdas la racha'
+          : '¡Buen inicio! Practica mañana también';
+      accentColor = AppColors.secondary;
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -258,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: isDark ? const Color(0xFF2A2A2A) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.secondary.withOpacity(0.3),
+          color: accentColor.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -268,12 +288,12 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.secondary.withOpacity(0.15),
+              color: accentColor.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
               child: Text(
-                _streakDays > 0 ? '🔥' : '❄️',
+                emoji,
                 style: const TextStyle(fontSize: 24),
               ),
             ),
@@ -284,7 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$_streakDays ${_streakDays == 1 ? 'día' : 'días'} de racha',
+                  title,
                   style: AppTextStyles.h3.copyWith(
                     color: isDark ? Colors.white : AppColors.textPrimary,
                     fontSize: 18,
@@ -292,11 +312,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _streakDays >= 7
-                      ? '¡Increíble constancia! Sigue así'
-                      : _streakDays >= 3
-                      ? '¡Vas muy bien! No pierdas la racha'
-                      : '¡Aprende hoy para mantener tu racha!',
+                  subtitle,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark ? Colors.white54 : AppColors.textSecondary,
                   ),
@@ -304,13 +320,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          Text(
-            '$_streakDays',
-            style: AppTextStyles.h1.copyWith(
-              color: AppColors.secondary,
-              fontSize: 36,
+          if (_streakDays > 0)
+            Text(
+              '$_streakDays',
+              style: AppTextStyles.h1.copyWith(
+                color: accentColor,
+                fontSize: 36,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -331,8 +348,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ? '¡Estás cerca de completar todo!'
         : '¡Felicidades! Has completado todas las palabras';
 
-    // En dark mode: fondo gris oscuro con borde de acento
-    // En light mode: gradiente rojo original
     final decoration = isDark
         ? BoxDecoration(
       color: const Color(0xFF2A2A2A),
@@ -358,19 +373,18 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
 
-    // Colores de texto adaptados
     final titleColor = isDark ? Colors.white : AppColors.textLight;
     final badgeBg = isDark
         ? AppColors.primary.withOpacity(0.3)
         : Colors.white.withOpacity(0.2);
-    final badgeText = isDark ? AppColors.primaryLight : AppColors.textLight;
+    final badgeText =
+    isDark ? AppColors.primaryLight : AppColors.textLight;
     final progressBg = isDark
         ? Colors.white.withOpacity(0.15)
         : Colors.white.withOpacity(0.3);
     final progressFill = isDark ? AppColors.primaryLight : Colors.white;
-    final messageColor = isDark
-        ? Colors.white70
-        : AppColors.textLight.withOpacity(0.9);
+    final messageColor =
+    isDark ? Colors.white70 : AppColors.textLight.withOpacity(0.9);
 
     return Container(
       width: double.infinity,
@@ -387,8 +401,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: AppTextStyles.h3.copyWith(color: titleColor),
               ),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: badgeBg,
                   borderRadius: BorderRadius.circular(20),
@@ -416,7 +430,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Text(
             progressMessage,
-            style: AppTextStyles.bodyMedium.copyWith(color: messageColor),
+            style:
+            AppTextStyles.bodyMedium.copyWith(color: messageColor),
           ),
         ],
       ),
@@ -493,7 +508,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            // Ícono del módulo con indicador de estado
             Stack(
               children: [
                 Container(
@@ -505,7 +519,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Icon(icon, color: color, size: 28),
                 ),
-                // Solo check verde si dominado, trofeo si completado
                 if (isMastered)
                   Positioned(
                     right: -2,
@@ -523,7 +536,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       child: Icon(
-                        isCompleted ? Icons.emoji_events : Icons.check,
+                        isCompleted
+                            ? Icons.emoji_events
+                            : Icons.check,
                         color: Colors.white,
                         size: 12,
                       ),
@@ -551,7 +566,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Palabras + mejor evaluación
                   Row(
                     children: [
                       Icon(Icons.book_outlined,
@@ -605,14 +619,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       backgroundColor: isDark
                           ? Colors.white.withOpacity(0.1)
                           : AppColors.progressBackground,
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                      valueColor:
+                      AlwaysStoppedAnimation<Color>(color),
                       minHeight: 4,
                     ),
                   ),
                 ],
               ),
             ),
-            // Flecha normal, o trofeo si completado
             Icon(
               isCompleted
                   ? Icons.emoji_events
@@ -620,7 +634,9 @@ class _HomeScreenState extends State<HomeScreen> {
               size: 20,
               color: isCompleted
                   ? AppColors.secondary
-                  : (isDark ? Colors.white38 : AppColors.textSecondary),
+                  : (isDark
+                  ? Colors.white38
+                  : AppColors.textSecondary),
             ),
           ],
         ),

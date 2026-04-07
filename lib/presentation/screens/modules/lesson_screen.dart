@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/utils/streak_helper.dart';
+import '../../../core/utils/achievements_helper.dart';
 import '../../../data/models/word_model.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../ar_view/ar_view_screen.dart';
@@ -73,6 +75,15 @@ class _LessonScreenState extends State<LessonScreen> {
     final newStatus = !_isLearned;
     setState(() => _isLearned = newStatus);
     await DatabaseHelper.instance.toggleWordLearned(widget.word.id!, newStatus);
+
+    if (newStatus) {
+      await StreakHelper.recordActivity();
+      // Verificar y notificar logros nuevos
+      if (mounted) {
+        await AchievementsHelper.checkAndNotify(context);
+      }
+    }
+
     _showLearnedFeedback();
   }
 
@@ -354,7 +365,8 @@ class _LessonScreenState extends State<LessonScreen> {
         ),
         child: Icon(
           _isPlayingAudio ? Icons.stop_rounded : Icons.volume_up_rounded,
-          color: _isPlayingAudio ? AppColors.textLight : widget.moduleColor,
+          color:
+          _isPlayingAudio ? AppColors.textLight : widget.moduleColor,
           size: 24,
         ),
       ),
@@ -369,8 +381,8 @@ class _LessonScreenState extends State<LessonScreen> {
         icon: Icon(
           _isLearned ? Icons.check_circle : Icons.check_circle_outline,
         ),
-        label:
-        Text(_isLearned ? '¡Palabra aprendida!' : 'Marcar como aprendida'),
+        label: Text(
+            _isLearned ? '¡Palabra aprendida!' : 'Marcar como aprendida'),
         style: ElevatedButton.styleFrom(
           backgroundColor: _isLearned
               ? AppColors.success
@@ -381,7 +393,8 @@ class _LessonScreenState extends State<LessonScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: _isLearned ? AppColors.success : widget.moduleColor,
+              color:
+              _isLearned ? AppColors.success : widget.moduleColor,
               width: 2,
             ),
           ),
@@ -390,7 +403,6 @@ class _LessonScreenState extends State<LessonScreen> {
     );
   }
 
-  // ─── OCULTA "Ver en RA" SI NO HAY MODELO 3D ───
   Widget _buildActionButtons() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -481,7 +493,8 @@ class _LessonScreenState extends State<LessonScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: widget.moduleColor.withOpacity(isDark ? 0.15 : 0.1),
+              color:
+              widget.moduleColor.withOpacity(isDark ? 0.15 : 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: widget.moduleColor.withOpacity(0.3),
@@ -490,13 +503,15 @@ class _LessonScreenState extends State<LessonScreen> {
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: widget.moduleColor, size: 24),
+                Icon(Icons.info_outline,
+                    color: widget.moduleColor, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     infoText,
                     style: AppTextStyles.bodySmall.copyWith(
-                      color: isDark ? Colors.white70 : AppColors.textPrimary,
+                      color:
+                      isDark ? Colors.white70 : AppColors.textPrimary,
                     ),
                   ),
                 ),
@@ -531,7 +546,8 @@ class _LessonScreenState extends State<LessonScreen> {
                 Text(
                   title,
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark ? Colors.white54 : AppColors.textSecondary,
+                    color:
+                    isDark ? Colors.white54 : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -565,7 +581,8 @@ class _LessonScreenState extends State<LessonScreen> {
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape:
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         duration: const Duration(seconds: 2),
       ),
     );

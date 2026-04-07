@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/utils/achievements_helper.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/module_model.dart';
 
@@ -20,6 +21,8 @@ class _StatsScreenState extends State<StatsScreen> {
   int _masteredModules = 0;
   int _streakDays = 0;
   double _avgScore = 0.0;
+  int _unlockedAchievements = 0;
+  int _totalAchievements = 0;
   List<_ModuleStat> _moduleStats = [];
 
   @override
@@ -33,6 +36,7 @@ class _StatsScreenState extends State<StatsScreen> {
       final modules = await DatabaseHelper.instance.getAllModules();
       final prefs = await SharedPreferences.getInstance();
       final streak = prefs.getInt('streak_count') ?? 0;
+      final achievementCount = await AchievementsHelper.getAchievementCount();
 
       int totalLearned = 0;
       int totalEvals = 0;
@@ -75,6 +79,8 @@ class _StatsScreenState extends State<StatsScreen> {
         _masteredModules = mastered;
         _streakDays = streak;
         _avgScore = scoredModules > 0 ? totalScore / scoredModules : 0;
+        _unlockedAchievements = achievementCount['unlocked'] ?? 0;
+        _totalAchievements = achievementCount['total'] ?? 0;
         _moduleStats = stats;
         _isLoading = false;
       });
@@ -111,8 +117,9 @@ class _StatsScreenState extends State<StatsScreen> {
                 Text(
                   'Tu progreso de aprendizaje',
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color:
-                    isDark ? Colors.white54 : AppColors.textSecondary,
+                    color: isDark
+                        ? Colors.white54
+                        : AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -180,20 +187,14 @@ class _StatsScreenState extends State<StatsScreen> {
           isDark: isDark,
         ),
         _buildStatTile(
-          icon: Icons.star,
-          label: 'Nivel',
-          value: _getLevel(),
-          color: const Color(0xFF6A1B9A),
+          icon: Icons.military_tech,
+          label: 'Logros',
+          value: '$_unlockedAchievements/$_totalAchievements',
+          color: const Color(0xFFFF8F00),
           isDark: isDark,
         ),
       ],
     );
-  }
-
-  String _getLevel() {
-    if (_masteredModules >= 4) return "Hamawt'a";
-    if (_masteredModules >= 2) return 'Yachaq';
-    return 'Qallariq';
   }
 
   Widget _buildStatTile({
@@ -314,13 +315,12 @@ class _StatsScreenState extends State<StatsScreen> {
                     color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
-                  child:
-                  const Icon(Icons.check, color: Colors.white, size: 16),
+                  child: const Icon(Icons.check,
+                      color: Colors.white, size: 16),
                 ),
             ],
           ),
           const SizedBox(height: 14),
-          // Barra de progreso
           Row(
             children: [
               Expanded(
@@ -343,7 +343,9 @@ class _StatsScreenState extends State<StatsScreen> {
                           style: AppTextStyles.bodySmall.copyWith(
                             color: stat.bestScore >= 70
                                 ? AppColors.success
-                                : (isDark ? Colors.white38 : AppColors.textSecondary),
+                                : (isDark
+                                ? Colors.white38
+                                : AppColors.textSecondary),
                             fontWeight: stat.bestScore >= 70
                                 ? FontWeight.w600
                                 : FontWeight.normal,
@@ -374,12 +376,16 @@ class _StatsScreenState extends State<StatsScreen> {
               children: [
                 Icon(Icons.quiz_outlined,
                     size: 14,
-                    color: isDark ? Colors.white38 : AppColors.textSecondary),
+                    color: isDark
+                        ? Colors.white38
+                        : AppColors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   '${stat.evalCount} ${stat.evalCount == 1 ? 'evaluación' : 'evaluaciones'} realizadas',
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark ? Colors.white38 : AppColors.textSecondary,
+                    color: isDark
+                        ? Colors.white38
+                        : AppColors.textSecondary,
                     fontSize: 11,
                   ),
                 ),

@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../core/utils/achievements_helper.dart';
 import '../../../data/datasources/database_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final VoidCallback? onBirthdayChanged;
+
+  const ProfileScreen({super.key, this.onBirthdayChanged});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -16,21 +19,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _selectedAvatar = 0;
   String _birthday = '';
   bool _isLoading = true;
+  List<Achievement> _achievements = [];
 
-  // ─── AVATARES PREDEFINIDOS (temática andina) ───
   static const List<String> _avatarEmojis = [
-    '🦙', // Llama
-    '🏔️', // Montaña
-    '🌞', // Inti/Sol
-    '🦅', // Cóndor
-    '🌽', // Maíz
-    '🎵', // Música
-    '🌈', // Arcoíris
-    '🪶', // Pluma
-    '🏺', // Cerámica
-    '⭐', // Estrella
-    '🔥', // Nina/Fuego
-    '🌺', // Tika/Flor
+    '🦙', '🏔️', '🌞', '🦅', '🌽', '🎵',
+    '🌈', '🪶', '🏺', '⭐', '🔥', '🌺',
   ];
 
   @override
@@ -41,10 +34,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     final prefs = await SharedPreferences.getInstance();
+    final achievements = await AchievementsHelper.getAchievements();
     setState(() {
       _userName = prefs.getString('user_name') ?? 'Usuario';
       _selectedAvatar = prefs.getInt('user_avatar') ?? 0;
       _birthday = prefs.getString('user_birthday') ?? '';
+      _achievements = achievements;
       _isLoading = false;
     });
   }
@@ -70,26 +65,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await prefs.setString('user_birthday', dateStr);
     setState(() => _birthday = dateStr);
     _showSnackBar('Fecha de nacimiento guardada', AppColors.success);
+    widget.onBirthdayChanged?.call();
   }
 
   Future<void> _resetProgress() async {
     final db = await DatabaseHelper.instance.database;
-
-    // Eliminar progreso y evaluaciones
     await db.delete('progress');
     await db.delete('evaluations');
 
-    // Resetear racha
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('streak_count', 0);
     await prefs.remove('last_active_date');
+
+    // Recargar logros después del reinicio
+    final achievements = await AchievementsHelper.getAchievements();
+    setState(() => _achievements = achievements);
 
     if (mounted) {
       _showSnackBar('Progreso reiniciado', AppColors.info);
     }
   }
 
-  /// Getter público para que MainNavigation lea el avatar
   static Future<int> getAvatarIndex() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt('user_avatar') ?? 0;
@@ -123,30 +119,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 32),
-
-              // Avatar + nombre
               _buildProfileHeader(isDark),
               const SizedBox(height: 32),
 
-              // Selector de avatar
+              // ─── LOGROS / INSIGNIAS ───
+              _buildAchievementsSection(isDark),
+              const SizedBox(height: 32),
+
               _buildSection('Elige tu avatar', isDark),
               const SizedBox(height: 12),
               _buildAvatarGrid(isDark),
               const SizedBox(height: 32),
 
-              // Cambiar nombre
               _buildSection('Nombre', isDark),
               const SizedBox(height: 12),
               _buildNameField(isDark),
               const SizedBox(height: 32),
 
-              // Fecha de nacimiento
               _buildSection('Fecha de nacimiento', isDark),
               const SizedBox(height: 12),
               _buildBirthdayField(isDark),
               const SizedBox(height: 40),
 
-              // Zona de peligro
               _buildDangerZone(isDark),
               const SizedBox(height: 32),
             ],
@@ -157,10 +151,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileHeader(bool isDark) {
+    final unlockedCount = _achievements.where((a) => a.isUnlocked).length;
+
     return Center(
       child: Column(
         children: [
-          // Avatar grande
           Container(
             width: 100,
             height: 100,
@@ -180,16 +175,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Text(
-            _userName,
-            style: AppTextStyles.h2.copyWith(
-              color: isDark ? Colors.white : null,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              _userName,
+              style: AppTextStyles.h2.copyWith(
+                color: isDark ? Colors.white : null,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Badge counter
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withOpacity(isDark ? 0.2 : 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '🏅 $unlockedCount/${_achievements.length} logros',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.secondary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           if (_birthday.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              '🎂 $_birthday',
+              '🎂 ${_formatBirthday(_birthday)}',
               style: AppTextStyles.bodySmall.copyWith(
                 color: isDark ? Colors.white38 : AppColors.textSecondary,
               ),
@@ -197,6 +214,202 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  // ─── SECCIÓN DE LOGROS ───
+  Widget _buildAchievementsSection(bool isDark) {
+    final unlockedCount = _achievements.where((a) => a.isUnlocked).length;
+
+    // Agrupar por categoría
+    final categories = <String, List<Achievement>>{};
+    for (var a in _achievements) {
+      categories.putIfAbsent(a.category, () => []).add(a);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Logros',
+              style: AppTextStyles.h3.copyWith(
+                color: isDark ? Colors.white : null,
+                fontSize: 16,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$unlockedCount/${_achievements.length}',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.secondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ...categories.entries.map((entry) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                entry.key,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: isDark ? Colors.white38 : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: entry.value.map((a) {
+                  return _buildAchievementBadge(a, isDark);
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildAchievementBadge(Achievement achievement, bool isDark) {
+    final isUnlocked = achievement.isUnlocked;
+
+    return GestureDetector(
+      onTap: () => _showAchievementDetail(achievement, isDark),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 72,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isUnlocked
+              ? AppColors.secondary.withOpacity(isDark ? 0.15 : 0.08)
+              : (isDark ? const Color(0xFF2A2A2A) : Colors.grey[100]),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isUnlocked
+                ? AppColors.secondary.withOpacity(0.4)
+                : (isDark
+                ? Colors.white.withOpacity(0.08)
+                : Colors.grey.withOpacity(0.2)),
+            width: isUnlocked ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              achievement.emoji,
+              style: TextStyle(
+                fontSize: 28,
+                color: isUnlocked ? null : Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              achievement.title,
+              style: AppTextStyles.bodySmall.copyWith(
+                fontSize: 8,
+                fontWeight: FontWeight.w600,
+                color: isUnlocked
+                    ? (isDark ? Colors.white70 : AppColors.textPrimary)
+                    : (isDark ? Colors.white24 : Colors.grey),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAchievementDetail(Achievement achievement, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                achievement.emoji,
+                style: const TextStyle(fontSize: 56),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                achievement.title,
+                style: AppTextStyles.h2.copyWith(
+                  color: isDark ? Colors.white : null,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.description,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: isDark ? Colors.white54 : AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: achievement.isUnlocked
+                      ? AppColors.success.withOpacity(isDark ? 0.2 : 0.1)
+                      : (isDark
+                      ? Colors.white.withOpacity(0.05)
+                      : Colors.grey[100]),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  achievement.isUnlocked
+                      ? '✅ ¡Desbloqueado!'
+                      : '🔒 Aún no conseguido',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: achievement.isUnlocked
+                        ? AppColors.success
+                        : (isDark ? Colors.white38 : Colors.grey),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.category,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: isDark ? Colors.white24 : AppColors.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -222,7 +435,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       itemCount: _avatarEmojis.length,
       itemBuilder: (context, index) {
         final isSelected = _selectedAvatar == index;
-
         return GestureDetector(
           onTap: () => _saveAvatar(index),
           child: AnimatedContainer(
@@ -255,7 +467,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildNameField(bool isDark) {
     final controller = TextEditingController(text: _userName);
-
     return Row(
       children: [
         Expanded(
@@ -267,9 +478,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             decoration: InputDecoration(
               hintText: 'Tu nombre',
-              hintStyle: TextStyle(
-                color: isDark ? Colors.white38 : null,
-              ),
+              hintStyle: TextStyle(color: isDark ? Colors.white38 : null),
               filled: true,
               fillColor: isDark ? const Color(0xFF2A2A2A) : Colors.grey[100],
               border: OutlineInputBorder(
@@ -280,7 +489,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: AppColors.primary, width: 2),
               ),
-              prefixIcon: Icon(Icons.person_outline, color: AppColors.primary),
+              prefixIcon:
+              Icon(Icons.person_outline, color: AppColors.primary),
               contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 14),
             ),
@@ -294,14 +504,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _saveName(name);
               FocusScope.of(context).unfocus();
             } else {
-              _showSnackBar(
-                  'El nombre debe tener al menos 3 caracteres', AppColors.warning);
+              _showSnackBar('El nombre debe tener al menos 3 caracteres',
+                  AppColors.warning);
             }
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -335,7 +546,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           },
         );
-
         if (picked != null) {
           _saveBirthday(picked);
         }
@@ -446,7 +656,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
-
         return AlertDialog(
           backgroundColor: isDark ? const Color(0xFF2A2A2A) : Colors.white,
           shape: RoundedRectangleBorder(
@@ -459,7 +668,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           content: Text(
-            'Se eliminarán todas las palabras aprendidas, evaluaciones y racha de días. Esta acción no se puede deshacer.',
+            'Se eliminarán todas las palabras aprendidas, evaluaciones, racha y logros. Tu nombre y avatar se mantienen.',
             style: AppTextStyles.bodyMedium.copyWith(
               color: isDark ? Colors.white70 : AppColors.textSecondary,
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/constants/app_routes.dart';
@@ -14,12 +15,25 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToOnboarding();
+    _navigate();
   }
 
-  Future<void> _navigateToOnboarding() async {
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted) {
+  Future<void> _navigate() async {
+    // Esperar mínimo 2 segundos para mostrar el splash
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final isRegistered = prefs.getBool('is_registered') ?? false;
+
+    if (!mounted) return;
+
+    if (isRegistered) {
+      // Ya tiene perfil creado → ir directo al home
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
+    } else {
+      // Primera vez → onboarding → registro
       Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
     }
   }
@@ -56,7 +70,8 @@ class _SplashScreenState extends State<SplashScreen> {
             const SizedBox(height: 48),
             // Indicador de carga
             const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.textLight),
+              valueColor:
+              AlwaysStoppedAnimation<Color>(AppColors.textLight),
             ),
           ],
         ),
