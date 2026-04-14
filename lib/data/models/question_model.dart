@@ -5,6 +5,7 @@ enum QuestionType {
   quechuaToSpanish, // Muestra palabra quechua → elige español
   spanishToQuechua, // Muestra palabra español → elige quechua
   audioToSpanish,   // Reproduce audio → elige español
+  imageToQuechua,   // Muestra imagen → elige quechua
 }
 
 class QuestionModel {
@@ -25,6 +26,7 @@ class QuestionModel {
   String get correctAnswer {
     switch (type) {
       case QuestionType.spanishToQuechua:
+      case QuestionType.imageToQuechua:
         return correctWord.wordQuechua;
       case QuestionType.quechuaToSpanish:
       case QuestionType.audioToSpanish:
@@ -34,7 +36,7 @@ class QuestionModel {
 
   bool get isCorrect => selectedAnswer == correctAnswer;
 
-  /// Etiqueta del tipo de pregunta (para revisión de resultados)
+  /// Etiqueta del tipo de pregunta
   String get typeLabel {
     switch (type) {
       case QuestionType.quechuaToSpanish:
@@ -43,6 +45,8 @@ class QuestionModel {
         return '¿Cómo se dice en quechua?';
       case QuestionType.audioToSpanish:
         return 'Escucha y selecciona';
+      case QuestionType.imageToQuechua:
+        return '¿Cómo se llama en quechua?';
     }
   }
 }

@@ -398,6 +398,18 @@ class _ModuleScreenState extends State<ModuleScreen> {
                   isDark: isDark,
                   filterType: QuestionType.audioToSpanish,
                 ),
+                const SizedBox(height: 10),
+
+                // Opción: Imagen → Quechua
+                _buildTypeOption(
+                  ctx: ctx,
+                  icon: Icons.image,
+                  label: 'Imagen → Quechua',
+                  subtitle: 'Mira la imagen, elige la palabra en quechua',
+                  color: _moduleColor,
+                  isDark: isDark,
+                  filterType: QuestionType.imageToQuechua,
+                ),
               ],
             ),
           ),

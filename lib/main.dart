@@ -25,6 +25,14 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  // ─── Transición suave global: fade + slide desde abajo ───
+  static final _pageTransition = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: _SmoothPageTransitionsBuilder(),
+      TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
+    },
+  );
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -38,11 +46,10 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: const [
-        Locale('es'), // Español
-        Locale('en'), // Inglés (fallback)
+        Locale('es'),
+        Locale('en'),
       ],
 
-      // ─── Sigue el tema del sistema (claro/oscuro) ───
       themeMode: ThemeMode.system,
 
       // ─── TEMA CLARO ───
@@ -57,6 +64,7 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         appBarTheme: const AppBarTheme(elevation: 0),
+        pageTransitionsTheme: _pageTransition,
       ),
 
       // ─── TEMA OSCURO ───
@@ -71,6 +79,7 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         appBarTheme: const AppBarTheme(elevation: 0),
+        pageTransitionsTheme: _pageTransition,
       ),
 
       initialRoute: AppRoutes.splash,
@@ -80,6 +89,53 @@ class MyApp extends StatelessWidget {
         AppRoutes.register: (context) => const RegisterScreen(),
         AppRoutes.home: (context) => const MainNavigation(),
       },
+    );
+  }
+}
+
+// ─── TRANSICIÓN PERSONALIZADA: FADE + SLIDE SUTIL ───
+class _SmoothPageTransitionsBuilder extends PageTransitionsBuilder {
+  @override
+  Widget buildTransitions<T>(
+      PageRoute<T> route,
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+      Widget child,
+      ) {
+    // Fade in
+    final fadeIn = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOut,
+    );
+
+    // Slide sutil desde abajo (solo 5% de la pantalla)
+    final slideIn = Tween<Offset>(
+      begin: const Offset(0, 0.05),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+    ));
+
+    // La pantalla saliente se desvanece ligeramente
+    final fadeOut = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: Curves.easeIn,
+    ));
+
+    return FadeTransition(
+      opacity: fadeOut,
+      child: SlideTransition(
+        position: slideIn,
+        child: FadeTransition(
+          opacity: fadeIn,
+          child: child,
+        ),
+      ),
     );
   }
 }

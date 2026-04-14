@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:async';
+import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../data/datasources/database_helper.dart';
@@ -12,7 +17,7 @@ import 'results_screen.dart';
 
 class EvaluationScreen extends StatefulWidget {
   final ModuleModel module;
-  final QuestionType? filterType; // null = mixto
+  final QuestionType? filterType;
 
   const EvaluationScreen({
     super.key,
@@ -32,7 +37,14 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlayingAudio = false;
 
+  String _difficulty = 'Qallariq';
+  int _optionsCount = 4;
+  int _timerSeconds = 0;
+  Timer? _questionTimer;
+  int _remainingSeconds = 0;
+
   Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+  bool get _canGoBack => _timerSeconds <= 0;
 
   String _getFilterLabel() {
     switch (widget.filterType) {
@@ -42,15 +54,50 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         return 'E → Q';
       case QuestionType.audioToSpanish:
         return 'Audio';
+      case QuestionType.imageToQuechua:
+        return 'Imagen';
       default:
         return 'Mixto';
+    }
+  }
+
+  String _getDifficultyLabel() {
+    switch (_difficulty) {
+      case 'Yachaq':
+        return 'Intermedio';
+      case "Hamawt'a":
+        return 'Difícil';
+      default:
+        return 'Fácil';
+    }
+  }
+
+  IconData _getDifficultyIcon() {
+    switch (_difficulty) {
+      case 'Yachaq':
+        return Icons.trending_up;
+      case "Hamawt'a":
+        return Icons.whatshot;
+      default:
+        return Icons.school;
+    }
+  }
+
+  Color _getDifficultyColor() {
+    switch (_difficulty) {
+      case 'Yachaq':
+        return AppColors.warning;
+      case "Hamawt'a":
+        return AppColors.error;
+      default:
+        return AppColors.success;
     }
   }
 
   @override
   void initState() {
     super.initState();
-    _generateQuestions();
+    _loadDifficultyAndGenerate();
     _setupAudioListeners();
   }
 
@@ -68,7 +115,62 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   @override
   void dispose() {
     _audioPlayer.dispose();
+    _questionTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadDifficultyAndGenerate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userLevel = prefs.getString('user_level') ?? 'Qallariq';
+
+    setState(() {
+      _difficulty = userLevel;
+      switch (userLevel) {
+        case 'Yachaq':
+          _optionsCount = 4;
+          _timerSeconds = 15;
+          break;
+        case "Hamawt'a":
+          _optionsCount = 5;
+          _timerSeconds = 10;
+          break;
+        default:
+          _optionsCount = 4;
+          _timerSeconds = 0;
+          break;
+      }
+    });
+
+    await _generateQuestions();
+  }
+
+  void _startTimer() {
+    _questionTimer?.cancel();
+    if (_timerSeconds <= 0) return;
+
+    setState(() => _remainingSeconds = _timerSeconds);
+
+    _questionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      setState(() => _remainingSeconds--);
+
+      if (_remainingSeconds <= 0) {
+        timer.cancel();
+        if (!_questions[_currentQuestionIndex].isAnswered) {
+          _questions[_currentQuestionIndex].selectedAnswer = '__timeout__';
+        }
+        if (_currentQuestionIndex < _questions.length - 1) {
+          setState(() => _currentQuestionIndex++);
+          _startTimer();
+        } else {
+          _finishEvaluation();
+        }
+      }
+    });
   }
 
   Future<void> _playQuestionAudio(String? audioUrl) async {
@@ -79,9 +181,26 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         return;
       }
       setState(() => _isPlayingAudio = true);
-      await _audioPlayer.play(UrlSource(audioUrl));
+
+      final file = await DefaultCacheManager()
+          .getSingleFile(audioUrl)
+          .timeout(const Duration(seconds: 10));
+      await _audioPlayer.play(DeviceFileSource(file.path));
     } catch (e) {
-      if (mounted) setState(() => _isPlayingAudio = false);
+      if (mounted) {
+        setState(() => _isPlayingAudio = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+                'Sin conexión. Conéctate a internet para escuchar el audio.'),
+            backgroundColor: const Color(0xFF616161),
+            behavior: SnackBarBehavior.floating,
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
@@ -100,49 +219,124 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
       final selectedWords = words.take(questionCount).toList();
       final random = Random();
 
-      // Verificar si el módulo tiene audios disponibles
       final hasAudio =
       words.any((w) => w.audioPath != null && w.audioPath!.isNotEmpty);
+      final hasImages =
+      words.any((w) => w.imagePath != null && w.imagePath!.isNotEmpty);
 
-      // Si hay filtro, usar solo ese tipo; si no, mezclar todos los disponibles
-      final availableTypes = widget.filterType != null
-          ? [widget.filterType!]
-          : [
-        QuestionType.quechuaToSpanish,
-        QuestionType.spanishToQuechua,
-        if (hasAudio) QuestionType.audioToSpanish,
-      ];
+      // Verificar conectividad
+      bool isOnline = true;
+      try {
+        final result = await InternetAddress.lookup('google.com')
+            .timeout(const Duration(seconds: 3));
+        isOnline = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+      } catch (_) {
+        isOnline = false;
+      }
 
-      // Si el filtro es audio pero no hay audios, fallback a mixto
-      final effectiveTypes = availableTypes.isEmpty
-          ? [QuestionType.quechuaToSpanish]
-          : availableTypes;
+      final effectiveHasAudio = hasAudio && isOnline;
+      final effectiveHasImages = hasImages && isOnline;
+
+      List<QuestionType> availableTypes;
+
+      if (widget.filterType != null) {
+        if (!isOnline &&
+            (widget.filterType == QuestionType.audioToSpanish ||
+                widget.filterType == QuestionType.imageToQuechua)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                    'Sin conexión. Se usarán preguntas de texto.'),
+                backgroundColor: const Color(0xFF616161),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+          availableTypes = [
+            QuestionType.quechuaToSpanish,
+            QuestionType.spanishToQuechua,
+          ];
+        } else {
+          availableTypes = [widget.filterType!];
+        }
+      } else {
+        switch (_difficulty) {
+          case "Hamawt'a":
+            availableTypes = [
+              QuestionType.spanishToQuechua,
+              QuestionType.spanishToQuechua,
+              if (effectiveHasAudio) QuestionType.audioToSpanish,
+              if (effectiveHasAudio) QuestionType.audioToSpanish,
+              if (effectiveHasImages) QuestionType.imageToQuechua,
+              if (effectiveHasImages) QuestionType.imageToQuechua,
+              QuestionType.quechuaToSpanish,
+            ];
+            break;
+          case 'Yachaq':
+            availableTypes = [
+              QuestionType.quechuaToSpanish,
+              QuestionType.spanishToQuechua,
+              if (effectiveHasAudio) QuestionType.audioToSpanish,
+              if (effectiveHasImages) QuestionType.imageToQuechua,
+            ];
+            break;
+          default:
+            availableTypes = [
+              QuestionType.quechuaToSpanish,
+              QuestionType.quechuaToSpanish,
+              QuestionType.spanishToQuechua,
+              if (effectiveHasAudio) QuestionType.audioToSpanish,
+              if (effectiveHasImages) QuestionType.imageToQuechua,
+            ];
+            break;
+        }
+      }
+
+      if (availableTypes.isEmpty) {
+        availableTypes = [QuestionType.quechuaToSpanish];
+      }
 
       final questions = <QuestionModel>[];
 
       for (var correctWord in selectedWords) {
-        final type = effectiveTypes[random.nextInt(effectiveTypes.length)];
+        var type = availableTypes[random.nextInt(availableTypes.length)];
+
+        if (type == QuestionType.imageToQuechua &&
+            (correctWord.imagePath == null ||
+                correctWord.imagePath!.isEmpty)) {
+          type = QuestionType.spanishToQuechua;
+        }
+
+        if (type == QuestionType.audioToSpanish &&
+            (correctWord.audioPath == null ||
+                correctWord.audioPath!.isEmpty)) {
+          type = QuestionType.quechuaToSpanish;
+        }
 
         final incorrectWords = words
             .where((w) => w.id != correctWord.id)
             .toList()
           ..shuffle(random);
 
+        final distractorCount = _optionsCount - 1;
+        final distractors = incorrectWords.take(distractorCount).toList();
+
         List<String> options;
 
-        if (type == QuestionType.spanishToQuechua) {
+        if (type == QuestionType.spanishToQuechua ||
+            type == QuestionType.imageToQuechua) {
           options = [
             correctWord.wordQuechua,
-            incorrectWords[0].wordQuechua,
-            incorrectWords[1].wordQuechua,
-            incorrectWords[2].wordQuechua,
+            ...distractors.map((w) => w.wordQuechua),
           ]..shuffle(random);
         } else {
           options = [
             correctWord.wordSpanish,
-            incorrectWords[0].wordSpanish,
-            incorrectWords[1].wordSpanish,
-            incorrectWords[2].wordSpanish,
+            ...distractors.map((w) => w.wordSpanish),
           ]..shuffle(random);
         }
 
@@ -157,6 +351,10 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         _questions = questions;
         _isLoading = false;
       });
+
+      if (_timerSeconds > 0) {
+        _startTimer();
+      }
     } catch (e) {
       print('Error generating questions: $e');
       _showError('Error al cargar las preguntas');
@@ -174,12 +372,14 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     if (_isPlayingAudio) _audioPlayer.stop();
     if (_currentQuestionIndex < _questions.length - 1) {
       setState(() => _currentQuestionIndex++);
+      if (_timerSeconds > 0) _startTimer();
     } else {
       _finishEvaluation();
     }
   }
 
   void _previousQuestion() {
+    if (!_canGoBack) return;
     if (_isPlayingAudio) _audioPlayer.stop();
     if (_currentQuestionIndex > 0) {
       setState(() => _currentQuestionIndex--);
@@ -188,6 +388,7 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
 
   Future<void> _finishEvaluation() async {
     if (_isPlayingAudio) _audioPlayer.stop();
+    _questionTimer?.cancel();
 
     final correctAnswers = _questions.where((q) => q.isCorrect).length;
     final totalQuestions = _questions.length;
@@ -267,6 +468,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _buildDifficultyBadge(),
+                  const SizedBox(height: 12),
                   _buildQuestionCounter(),
                   const SizedBox(height: 24),
                   _buildQuestionCard(currentQuestion, isDark),
@@ -280,6 +483,107 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDifficultyBadge() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: _getDifficultyColor().withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _getDifficultyColor().withOpacity(0.3),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(_getDifficultyIcon(),
+                  size: 14, color: _getDifficultyColor()),
+              const SizedBox(width: 4),
+              Text(
+                _getDifficultyLabel(),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: _getDifficultyColor(),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_timerSeconds > 0) ...[
+          const SizedBox(width: 12),
+          Container(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: _remainingSeconds <= 5
+                  ? AppColors.error.withOpacity(0.15)
+                  : AppColors.info.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _remainingSeconds <= 5
+                    ? AppColors.error.withOpacity(0.4)
+                    : AppColors.info.withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.timer,
+                  size: 14,
+                  color: _remainingSeconds <= 5
+                      ? AppColors.error
+                      : AppColors.info,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${_remainingSeconds}s',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: _remainingSeconds <= 5
+                        ? AppColors.error
+                        : AppColors.info,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (!_canGoBack) ...[
+          const SizedBox(width: 12),
+          Container(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.block, size: 12, color: Colors.grey),
+                const SizedBox(width: 3),
+                Text(
+                  'Sin retroceso',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.grey,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -312,7 +616,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
             child: LinearProgressIndicator(
               value: progress,
               backgroundColor: Colors.white.withOpacity(0.3),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              valueColor:
+              const AlwaysStoppedAnimation<Color>(Colors.white),
               minHeight: 8,
             ),
           ),
@@ -344,12 +649,12 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
     );
   }
 
-  // ─── TARJETA DE PREGUNTA: DIFERENTE SEGÚN TIPO ───
   Widget _buildQuestionCard(QuestionModel question, bool isDark) {
     return Card(
       elevation: 4,
       color: isDark ? Theme.of(context).cardColor : null,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16)),
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -365,9 +670,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         ),
         child: Column(
           children: [
-            // Chip del tipo de pregunta
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: _moduleColor.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
@@ -382,22 +687,57 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Instrucción
             Text(
               question.typeLabel,
               style: AppTextStyles.bodyLarge.copyWith(
-                color: isDark ? Colors.white60 : AppColors.textSecondary,
+                color:
+                isDark ? Colors.white60 : AppColors.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-
-            // ─── CONTENIDO SEGÚN TIPO ───
-            if (question.type == QuestionType.audioToSpanish) ...[
+            if (question.type == QuestionType.imageToQuechua) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  height: 180,
+                  width: double.infinity,
+                  child: CachedNetworkImage(
+                    imageUrl: question.correctWord.imagePath ?? '',
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            _moduleColor),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.image_not_supported,
+                              size: 40,
+                              color: _moduleColor.withOpacity(0.3)),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Imagen no disponible',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: isDark
+                                  ? Colors.white38
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ] else if (question.type ==
+                QuestionType.audioToSpanish) ...[
               GestureDetector(
-                onTap: () =>
-                    _playQuestionAudio(question.correctWord.audioPath),
+                onTap: () => _playQuestionAudio(
+                    question.correctWord.audioPath),
                 child: Container(
                   width: 100,
                   height: 100,
@@ -420,19 +760,26 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     _isPlayingAudio
                         ? Icons.stop_rounded
                         : Icons.volume_up_rounded,
-                    color: _isPlayingAudio ? Colors.white : _moduleColor,
+                    color: _isPlayingAudio
+                        ? Colors.white
+                        : _moduleColor,
                     size: 48,
                   ),
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                _isPlayingAudio ? 'Reproduciendo...' : 'Toca para escuchar',
+                _isPlayingAudio
+                    ? 'Reproduciendo...'
+                    : 'Toca para escuchar',
                 style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark ? Colors.white38 : AppColors.textSecondary,
+                  color: isDark
+                      ? Colors.white38
+                      : AppColors.textSecondary,
                 ),
               ),
-            ] else if (question.type == QuestionType.spanishToQuechua) ...[
+            ] else if (question.type ==
+                QuestionType.spanishToQuechua) ...[
               Text(
                 question.correctWord.wordSpanish,
                 style: AppTextStyles.h1.copyWith(
@@ -451,7 +798,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               Text(
                 question.correctWord.phonetic,
                 style: AppTextStyles.bodyMedium.copyWith(
-                  color: isDark ? Colors.white54 : AppColors.textSecondary,
+                  color: isDark
+                      ? Colors.white54
+                      : AppColors.textSecondary,
                   fontStyle: FontStyle.italic,
                 ),
                 textAlign: TextAlign.center,
@@ -471,6 +820,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
         return 'Español → Quechua';
       case QuestionType.audioToSpanish:
         return '🔊 Audio → Español';
+      case QuestionType.imageToQuechua:
+        return '🖼️ Imagen → Quechua';
     }
   }
 
@@ -494,7 +845,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     : AppColors.surface),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? _moduleColor : Colors.transparent,
+                  color: isSelected
+                      ? _moduleColor
+                      : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -511,7 +864,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                             : AppColors.textSecondary,
                         width: 2,
                       ),
-                      color: isSelected ? _moduleColor : Colors.transparent,
+                      color: isSelected
+                          ? _moduleColor
+                          : Colors.transparent,
                     ),
                     child: isSelected
                         ? const Icon(Icons.check,
@@ -528,7 +883,9 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                             : FontWeight.normal,
                         color: isSelected
                             ? _moduleColor
-                            : (isDark ? Colors.white : AppColors.textPrimary),
+                            : (isDark
+                            ? Colors.white
+                            : AppColors.textPrimary),
                       ),
                     ),
                   ),
@@ -542,7 +899,8 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
   }
 
   Widget _buildNavigationButtons() {
-    final isLastQuestion = _currentQuestionIndex == _questions.length - 1;
+    final isLastQuestion =
+        _currentQuestionIndex == _questions.length - 1;
     final isFirstQuestion = _currentQuestionIndex == 0;
     final canProceed = _questions[_currentQuestionIndex].isAnswered;
 
@@ -558,15 +916,18 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              'Selecciona una respuesta para continuar',
+              _timerSeconds > 0
+                  ? 'Selecciona antes de que se agote el tiempo'
+                  : 'Selecciona una respuesta para continuar',
               style: AppTextStyles.bodyMedium
                   .copyWith(color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
             ),
           ),
         if (canProceed) ...[
           Row(
             children: [
-              if (!isFirstQuestion)
+              if (!isFirstQuestion && _canGoBack)
                 Expanded(
                   child: SizedBox(
                     height: 56,
@@ -584,15 +945,18 @@ class _EvaluationScreenState extends State<EvaluationScreen> {
                     ),
                   ),
                 ),
-              if (!isFirstQuestion) const SizedBox(width: 12),
+              if (!isFirstQuestion && _canGoBack)
+                const SizedBox(width: 12),
               Expanded(
                 child: SizedBox(
                   height: 56,
                   child: ElevatedButton.icon(
-                    onPressed:
-                    isLastQuestion ? _finishEvaluation : _nextQuestion,
-                    icon: Icon(
-                        isLastQuestion ? Icons.check : Icons.arrow_forward),
+                    onPressed: isLastQuestion
+                        ? _finishEvaluation
+                        : _nextQuestion,
+                    icon: Icon(isLastQuestion
+                        ? Icons.check
+                        : Icons.arrow_forward),
                     label: Text(
                       isLastQuestion ? 'Finalizar' : 'Siguiente',
                       style: AppTextStyles.button,

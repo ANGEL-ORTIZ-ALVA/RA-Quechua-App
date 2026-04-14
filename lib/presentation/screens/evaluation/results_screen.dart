@@ -8,6 +8,9 @@ import '../../../data/models/module_model.dart';
 import '../../../data/models/question_model.dart';
 import 'evaluation_screen.dart';
 import '../modules/module_screen.dart';
+import '../modules/lesson_screen.dart';
+import '../../../data/models/word_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ResultsScreen extends StatefulWidget {
   final EvaluationModel evaluation;
@@ -29,6 +32,134 @@ class ResultsScreen extends StatefulWidget {
 
 class _ResultsScreenState extends State<ResultsScreen> {
   Color get _moduleColor => AppColors.getModuleColor(widget.module.id ?? 1);
+  /// Palabras que el usuario falló
+  List<WordModel> get _failedWords => widget.questions
+      .where((q) => !q.isCorrect)
+      .map((q) => q.correctWord)
+      .toList();
+
+  void _showReviewErrors(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5,
+          minChildSize: 0.3,
+          maxChildSize: 0.8,
+          expand: false,
+          builder: (_, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.white24 : Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Palabras a repasar',
+                    style: AppTextStyles.h3.copyWith(
+                      color: isDark ? Colors.white : null,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Toca una palabra para ir a su lección',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: isDark ? Colors.white54 : AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: _failedWords.length,
+                      itemBuilder: (context, index) {
+                        final word = _failedWords[index];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          color: isDark ? const Color(0xFF2A2A2A) : null,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: AppColors.error.withOpacity(0.3),
+                            ),
+                          ),
+                          child: ListTile(
+                            onTap: () {
+                              Navigator.pop(ctx); // cerrar bottom sheet
+                              Navigator.popUntil(
+                                  context, (route) => route.isFirst);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => LessonScreen(
+                                    word: word,
+                                    moduleColor: _moduleColor,
+                                  ),
+                                ),
+                              );
+                            },
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(Icons.close,
+                                  color: AppColors.error, size: 20),
+                            ),
+                            title: Text(
+                              word.wordQuechua,
+                              style: AppTextStyles.bodyLarge.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.white : null,
+                              ),
+                            ),
+                            subtitle: Text(
+                              '${word.wordSpanish} • ${word.phonetic}',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: isDark
+                                    ? Colors.white54
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                            trailing: Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                              color: isDark
+                                  ? Colors.white38
+                                  : AppColors.textSecondary,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -334,6 +465,24 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       ),
                       const SizedBox(height: 12),
                       if (question.type ==
+                          QuestionType.imageToQuechua) ...[
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: SizedBox(
+                            height: 80,
+                            width: 80,
+                            child: CachedNetworkImage(
+                              imageUrl:
+                              question.correctWord.imagePath ?? '',
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) =>
+                                  Icon(Icons.image,
+                                      color: _moduleColor, size: 40),
+                            ),
+                          ),
+                        ),
+                      ] else
+                      if (question.type ==
                           QuestionType.audioToSpanish) ...[
                         Row(
                           children: [
@@ -377,6 +526,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                       const SizedBox(height: 12),
                       Divider(color: isDark ? Colors.white12 : null),
                       const SizedBox(height: 8),
+                      // Respuesta del usuario
                       if (question.selectedAnswer != null) ...[
                         Row(
                           children: [
@@ -402,12 +552,23 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          question.selectedAnswer!,
+                          question.selectedAnswer == '__timeout__' ||
+                              question.selectedAnswer == ''
+                              ? '⏱️ Sin responder (tiempo agotado)'
+                              : question.selectedAnswer!,
                           style: AppTextStyles.bodyLarge.copyWith(
-                            color: isCorrect
+                            color: question.selectedAnswer == '__timeout__' ||
+                                question.selectedAnswer == ''
+                                ? AppColors.warning
+                                : (isCorrect
                                 ? AppColors.success
-                                : AppColors.error,
+                                : AppColors.error),
                             fontWeight: FontWeight.w600,
+                            fontStyle:
+                            question.selectedAnswer == '__timeout__' ||
+                                question.selectedAnswer == ''
+                                ? FontStyle.italic
+                                : FontStyle.normal,
                           ),
                         ),
                       ],
@@ -454,6 +615,8 @@ class _ResultsScreenState extends State<ResultsScreen> {
         return 'E → Q';
       case QuestionType.audioToSpanish:
         return '🔊 → E';
+      case QuestionType.imageToQuechua:
+        return '🖼️ → Q';
     }
   }
 
@@ -530,6 +693,29 @@ class _ResultsScreenState extends State<ResultsScreen> {
               ),
             ),
           ),
+
+          // ─── BOTÓN REPASAR ERRORES ───
+          if (_failedWords.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: OutlinedButton.icon(
+                onPressed: () => _showReviewErrors(context),
+                icon: const Icon(Icons.replay),
+                label: Text(
+                    'Repasar ${_failedWords.length} ${_failedWords.length == 1 ? 'error' : 'errores'}'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.warning,
+                  side: BorderSide(color: AppColors.warning),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,

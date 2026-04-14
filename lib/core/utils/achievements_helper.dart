@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/datasources/database_helper.dart';
 import '../constants/app_colors.dart';
@@ -23,7 +24,6 @@ class Achievement {
 }
 
 class AchievementsHelper {
-  /// Calcula todos los logros en tiempo real desde la DB
   static Future<List<Achievement>> getAchievements() async {
     final db = DatabaseHelper.instance;
     final prefs = await SharedPreferences.getInstance();
@@ -152,15 +152,12 @@ class AchievementsHelper {
     ];
   }
 
-  /// Retorna solo el conteo
   static Future<Map<String, int>> getAchievementCount() async {
     final achievements = await getAchievements();
     final unlocked = achievements.where((a) => a.isUnlocked).length;
     return {'unlocked': unlocked, 'total': achievements.length};
   }
 
-  /// Detecta logros recién desbloqueados y muestra notificación.
-  /// Llama esto después de aprender una palabra o completar una evaluación.
   static Future<void> checkAndNotify(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final previouslyUnlocked =
@@ -172,15 +169,12 @@ class AchievementsHelper {
         .map((a) => a.id)
         .toList();
 
-    // Encontrar los nuevos
     final newlyUnlocked = currentlyUnlocked
         .where((id) => !previouslyUnlocked.contains(id))
         .toList();
 
-    // Guardar el estado actual
     await prefs.setStringList('unlocked_achievements', currentlyUnlocked);
 
-    // Mostrar notificación por cada logro nuevo
     if (newlyUnlocked.isNotEmpty && context.mounted) {
       final newAchievements =
       achievements.where((a) => newlyUnlocked.contains(a.id)).toList();
@@ -192,7 +186,6 @@ class AchievementsHelper {
     }
   }
 
-  /// Inicializa la lista de logros guardados (llamar al crear perfil)
   static Future<void> initializeTracking() async {
     final prefs = await SharedPreferences.getInstance();
     final existing = prefs.getStringList('unlocked_achievements');
@@ -201,7 +194,6 @@ class AchievementsHelper {
     }
   }
 
-  /// Resetea el tracking (llamar al reiniciar progreso)
   static Future<void> resetTracking() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('unlocked_achievements', []);
@@ -211,12 +203,14 @@ class AchievementsHelper {
       BuildContext context, Achievement achievement) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // Vibración de feedback
+    HapticFeedback.mediumImpact();
+
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isDismissible: true,
       builder: (ctx) {
-        // Auto-cerrar después de 3 segundos
         Future.delayed(const Duration(seconds: 3), () {
           if (ctx.mounted && Navigator.of(ctx).canPop()) {
             Navigator.of(ctx).pop();

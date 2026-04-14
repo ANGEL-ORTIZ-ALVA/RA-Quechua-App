@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/utils/streak_helper.dart';
@@ -7,6 +8,7 @@ import '../../../core/utils/achievements_helper.dart';
 import '../../../data/models/word_model.dart';
 import '../../../data/datasources/database_helper.dart';
 import '../ar_view/ar_view_screen.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class LessonScreen extends StatefulWidget {
   final WordModel word;
@@ -100,15 +102,22 @@ class _LessonScreenState extends State<LessonScreen> {
         return;
       }
       setState(() => _isPlayingAudio = true);
-      await _audioPlayer.play(UrlSource(audioUrl));
+
+      // Descargar/cachear el audio primero, luego reproducir local
+      final file = await DefaultCacheManager()
+          .getSingleFile(audioUrl)
+          .timeout(const Duration(seconds: 10));
+      await _audioPlayer.play(DeviceFileSource(file.path));
     } catch (e) {
       if (mounted) {
         setState(() => _isPlayingAudio = false);
-        _showSnackBar('Error al reproducir el audio', AppColors.error);
+        _showSnackBar(
+          'Sin conexión. Conéctate a internet para escuchar el audio.',
+          const Color(0xFF616161),
+        );
       }
     }
   }
-
   void _openArView() {
     if (_isPlayingAudio) _audioPlayer.stop();
 
@@ -243,43 +252,48 @@ class _LessonScreenState extends State<LessonScreen> {
             borderRadius: BorderRadius.circular(16),
             child: widget.word.imagePath != null &&
                 widget.word.imagePath!.isNotEmpty
-                ? Image.network(
-              widget.word.imagePath!,
+                ? CachedNetworkImage(
+              imageUrl: widget.word.imagePath!,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(
-                  child: CircularProgressIndicator(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                        : null,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                        widget.moduleColor),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline,
-                          size: 60,
-                          color: AppColors.error.withOpacity(0.5)),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Error al cargar imagen',
-                        style: AppTextStyles.bodyMedium.copyWith(
+              placeholder: (context, url) => Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      widget.moduleColor),
+                ),
+              ),
+              errorWidget: (context, url, error) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wifi_off,
+                        size: 48,
+                        color: widget.moduleColor.withOpacity(0.4)),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Sin conexión',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: isDark
+                            ? Colors.white54
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(
+                        'Conéctate a internet para ver la imagen',
+                        style: AppTextStyles.bodySmall.copyWith(
                           color: isDark
-                              ? Colors.white54
+                              ? Colors.white38
                               : AppColors.textSecondary,
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  ],
+                ),
+              ),
             )
                 : Center(
               child: Column(
@@ -305,7 +319,6 @@ class _LessonScreenState extends State<LessonScreen> {
       ),
     );
   }
-
   Widget _buildPhoneticCard(bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),

@@ -8,10 +8,55 @@ import '../../../data/datasources/database_helper.dart';
 import '../../../data/models/module_model.dart';
 import '../modules/module_screen.dart';
 
-// Avatares predefinidos (misma lista que en profile_screen.dart)
 const List<String> kAvatarEmojis = [
   '🦙', '🏔️', '🌞', '🦅', '🌽', '🎵',
   '🌈', '🪶', '🏺', '⭐', '🔥', '🌺',
+];
+
+// ─── DEFINICIÓN DE NIVELES ───
+class LevelDefinition {
+  final String name;
+  final String nameQuechua;
+  final String description;
+  final IconData icon;
+  final Color color;
+  final List<int> moduleIds; // IDs de módulos en este nivel
+
+  const LevelDefinition({
+    required this.name,
+    required this.nameQuechua,
+    required this.description,
+    required this.icon,
+    required this.color,
+    required this.moduleIds,
+  });
+}
+
+final List<LevelDefinition> kLevels = [
+  LevelDefinition(
+    name: 'Básico',
+    nameQuechua: 'Qallariq',
+    description: 'Vocabulario fundamental: números y colores',
+    icon: Icons.school,
+    color: AppColors.success,
+    moduleIds: [4, 6], // Números, Colores
+  ),
+  LevelDefinition(
+    name: 'Intermedio',
+    nameQuechua: 'Yachaq',
+    description: 'Sustantivos concretos: fauna y naturaleza andina',
+    icon: Icons.trending_up,
+    color: AppColors.info,
+    moduleIds: [1, 2], // Animales, Naturaleza
+  ),
+  LevelDefinition(
+    name: 'Avanzado',
+    nameQuechua: "Hamawt'a",
+    description: 'Cultura y expresiones: familia y saludos',
+    icon: Icons.whatshot,
+    color: const Color(0xFF6A1B9A),
+    moduleIds: [3, 5], // Familia y Cultura, Saludos
+  ),
 ];
 
 class HomeScreen extends StatefulWidget {
@@ -33,6 +78,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _streakWasLost = false;
   int _previousStreak = 0;
   int _avatarIndex = 0;
+
+  // ─── Estado de niveles desbloqueados ───
+  Set<int> _unlockedLevelIndices = {0}; // Nivel 0 (Básico) siempre desbloqueado
 
   @override
   void initState() {
@@ -86,11 +134,26 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
+      // Calcular niveles desbloqueados
+      final unlocked = <int>{0}; // Básico siempre
+      for (int i = 0; i < kLevels.length - 1; i++) {
+        final levelModuleIds = kLevels[i].moduleIds;
+        final allMastered = levelModuleIds.every((id) {
+          final learned = moduleProgressMap[id] ?? 0;
+          final score = evalScoresMap[id] ?? 0.0;
+          return learned >= 5 && score >= 70;
+        });
+        if (allMastered) {
+          unlocked.add(i + 1);
+        }
+      }
+
       setState(() {
         _totalLearnedWords = total;
         _moduleProgress = moduleProgressMap;
         _moduleEvalScores = evalScoresMap;
         _masteredModulesCount = mastered;
+        _unlockedLevelIndices = unlocked;
         _isLoading = false;
       });
 
@@ -102,7 +165,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ─── RACHA: SOLO LECTURA (no incrementa al abrir) ───
   Future<void> _loadStreak() async {
     final info = await StreakHelper.getStreakInfo();
     setState(() {
@@ -144,6 +206,25 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  bool _isModuleUnlocked(int moduleId) {
+    for (int i = 0; i < kLevels.length; i++) {
+      if (kLevels[i].moduleIds.contains(moduleId)) {
+        if (!_unlockedLevelIndices.contains(i)) return false;
+
+        // Dentro del nivel, el primer módulo siempre desbloqueado
+        // El segundo requiere dominar el primero
+        final moduleIndex = kLevels[i].moduleIds.indexOf(moduleId);
+        if (moduleIndex == 0) return true;
+
+        final previousModuleId = kLevels[i].moduleIds[moduleIndex - 1];
+        final learned = _moduleProgress[previousModuleId] ?? 0;
+        final score = _moduleEvalScores[previousModuleId] ?? 0.0;
+        return learned >= 5 && score >= 70;
+      }
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -168,20 +249,195 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 16),
                   _buildProgressCard(isDark),
                   const SizedBox(height: 32),
-                  Text(
-                    'Módulos de Aprendizaje',
-                    style: AppTextStyles.h2.copyWith(
-                      color: isDark ? Colors.white : null,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ..._buildModuleCards(isDark),
+                  // ─── MÓDULOS POR NIVELES ───
+                  ...kLevels.asMap().entries.map((entry) {
+                    final levelIndex = entry.key;
+                    final level = entry.value;
+                    final isUnlocked =
+                    _unlockedLevelIndices.contains(levelIndex);
+                    return _buildLevelSection(
+                        level, levelIndex, isUnlocked, isDark);
+                  }),
                 ],
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // ─── SECCIÓN DE NIVEL ───
+  Widget _buildLevelSection(LevelDefinition level, int levelIndex,
+      bool isUnlocked, bool isDark) {
+    // Calcular progreso del nivel
+    int levelLearned = 0;
+    int levelTotal = level.moduleIds.length * 10;
+    bool levelCompleted = true;
+
+    for (var id in level.moduleIds) {
+      levelLearned += _moduleProgress[id] ?? 0;
+      final learned = _moduleProgress[id] ?? 0;
+      final score = _moduleEvalScores[id] ?? 0.0;
+      if (learned < 5 || score < 70) levelCompleted = false;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header del nivel
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: isUnlocked
+                ? level.color.withOpacity(isDark ? 0.15 : 0.08)
+                : (isDark
+                ? Colors.white.withOpacity(0.03)
+                : Colors.grey.withOpacity(0.05)),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isUnlocked
+                  ? level.color.withOpacity(0.3)
+                  : (isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : Colors.grey.withOpacity(0.15)),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isUnlocked
+                      ? level.color.withOpacity(isDark ? 0.3 : 0.15)
+                      : Colors.grey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isUnlocked ? level.icon : Icons.lock,
+                  color: isUnlocked
+                      ? level.color
+                      : (isDark ? Colors.white24 : Colors.grey),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '${level.name} — ${level.nameQuechua}',
+                          style: AppTextStyles.h3.copyWith(
+                            color: isUnlocked
+                                ? (isDark ? Colors.white : AppColors.textPrimary)
+                                : (isDark ? Colors.white24 : Colors.grey),
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (levelCompleted && isUnlocked) ...[
+                          const SizedBox(width: 8),
+                          Icon(Icons.check_circle,
+                              color: AppColors.success, size: 18),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isUnlocked
+                          ? level.description
+                          : 'Completa el nivel anterior para desbloquear',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isUnlocked
+                            ? (isDark
+                            ? Colors.white54
+                            : AppColors.textSecondary)
+                            : (isDark ? Colors.white12 : Colors.grey[400]),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Progreso del nivel
+              if (isUnlocked)
+                Text(
+                  '$levelLearned/$levelTotal',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: level.color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Módulos del nivel
+        ...level.moduleIds.map((moduleId) {
+          final module = _modules.firstWhere(
+                (m) => m.id == moduleId,
+            orElse: () => _modules.first,
+          );
+          final color = AppColors.getModuleColor(module.id ?? 1);
+          final icon = AppColors.getModuleIcon(module.icon);
+          final learnedWords = _moduleProgress[module.id] ?? 0;
+          final bestScore = _moduleEvalScores[module.id] ?? 0.0;
+          final isMastered = learnedWords >= 5 && bestScore >= 70;
+          final isCompleted = learnedWords >= 10 && bestScore >= 70;
+          final progress = learnedWords / 10.0;
+          final moduleUnlocked = _isModuleUnlocked(module.id!);
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12.0),
+            child: _buildModuleCard(
+              module: module,
+              icon: icon,
+              color: color,
+              progress: progress,
+              learnedWords: learnedWords,
+              bestScore: bestScore,
+              isMastered: isMastered,
+              isCompleted: isCompleted,
+              isLocked: !moduleUnlocked,
+              isDark: isDark,
+              onTap: moduleUnlocked
+                  ? () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ModuleScreen(module: module),
+                  ),
+                );
+                _refreshProgress();
+              }
+                  : () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isUnlocked
+                          ? 'Completa el módulo anterior para desbloquear este'
+                          : 'Completa el nivel ${kLevels[levelIndex - 1].name} para desbloquear',
+                    ),
+                    backgroundColor: const Color(0xFF616161),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+            ),
+          );
+        }),
+        const SizedBox(height: 20),
+      ],
     );
   }
 
@@ -239,27 +495,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStreakCard(bool isDark) {
-    // Determinar emoji, mensaje y estilo según estado de racha
     final String emoji;
     final String title;
     final String subtitle;
     final Color accentColor;
 
     if (_streakWasLost && _previousStreak > 1) {
-      // Racha perdida recientemente
       emoji = '💔';
       title = 'Racha perdida';
       subtitle =
       'Tenías $_previousStreak días. ¡Practica hoy para empezar una nueva!';
       accentColor = AppColors.warning;
     } else if (_streakDays == 0) {
-      // Sin racha activa
       emoji = '❄️';
       title = 'Sin racha activa';
-      subtitle = '¡Aprende una palabra o haz una evaluación para comenzar!';
+      subtitle =
+      '¡Aprende una palabra o haz una evaluación para comenzar!';
       accentColor = AppColors.info;
     } else {
-      // Racha activa
       emoji = '🔥';
       title =
       '$_streakDays ${_streakDays == 1 ? 'día' : 'días'} de racha';
@@ -292,10 +545,7 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text(
-                emoji,
-                style: const TextStyle(fontSize: 24),
-              ),
+              child: Text(emoji, style: const TextStyle(fontSize: 24)),
             ),
           ),
           const SizedBox(width: 16),
@@ -314,7 +564,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   subtitle,
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: isDark ? Colors.white54 : AppColors.textSecondary,
+                    color:
+                    isDark ? Colors.white54 : AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -438,43 +689,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  List<Widget> _buildModuleCards(bool isDark) {
-    return _modules.asMap().entries.map((entry) {
-      final module = entry.value;
-      final color = AppColors.getModuleColor(module.id ?? 1);
-      final icon = AppColors.getModuleIcon(module.icon);
-      final learnedWords = _moduleProgress[module.id] ?? 0;
-      final bestScore = _moduleEvalScores[module.id] ?? 0.0;
-      final isMastered = learnedWords >= 5 && bestScore >= 70;
-      final isCompleted = learnedWords >= 10 && bestScore >= 70;
-      final progress = learnedWords / 10.0;
-
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 16.0),
-        child: _buildModuleCard(
-          module: module,
-          icon: icon,
-          color: color,
-          progress: progress,
-          learnedWords: learnedWords,
-          bestScore: bestScore,
-          isMastered: isMastered,
-          isCompleted: isCompleted,
-          isDark: isDark,
-          onTap: () async {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ModuleScreen(module: module),
-              ),
-            );
-            _refreshProgress();
-          },
-        ),
-      );
-    }).toList();
-  }
-
   Widget _buildModuleCard({
     required ModuleModel module,
     required IconData icon,
@@ -484,161 +698,185 @@ class _HomeScreenState extends State<HomeScreen> {
     required double bestScore,
     required bool isMastered,
     required bool isCompleted,
+    required bool isLocked,
     required bool isDark,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isCompleted
-                ? AppColors.success.withOpacity(0.6)
-                : isMastered
-                ? AppColors.success.withOpacity(0.3)
-                : isDark
-                ? Colors.white.withOpacity(0.08)
-                : AppColors.progressBackground,
-            width: isCompleted ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(isDark ? 0.2 : 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: color, size: 28),
-                ),
-                if (isMastered)
-                  Positioned(
-                    right: -2,
-                    top: -2,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: isCompleted
-                            ? AppColors.secondary
-                            : AppColors.success,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Theme.of(context).cardColor,
-                          width: 2,
-                        ),
-                      ),
-                      child: Icon(
-                        isCompleted
-                            ? Icons.emoji_events
-                            : Icons.check,
-                        color: Colors.white,
-                        size: 12,
-                      ),
-                    ),
-                  ),
-              ],
+      child: Opacity(
+        opacity: isLocked ? 0.5 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isLocked
+                  ? (isDark
+                  ? Colors.white.withOpacity(0.05)
+                  : Colors.grey.withOpacity(0.15))
+                  : isCompleted
+                  ? AppColors.success.withOpacity(0.6)
+                  : isMastered
+                  ? AppColors.success.withOpacity(0.3)
+                  : isDark
+                  ? Colors.white.withOpacity(0.08)
+                  : AppColors.progressBackground,
+              width: isCompleted ? 2 : 1,
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          child: Row(
+            children: [
+              Stack(
                 children: [
-                  Text(
-                    module.name,
-                    style: AppTextStyles.h3.copyWith(
-                      color: isDark ? Colors.white : null,
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(isDark ? 0.2 : 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      isLocked ? Icons.lock : icon,
+                      color: isLocked
+                          ? (isDark ? Colors.white24 : Colors.grey)
+                          : color,
+                      size: 28,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    module.nameQuechua,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.book_outlined,
-                          size: 14,
-                          color: learnedWords >= 10
-                              ? AppColors.success
-                              : (isDark
-                              ? Colors.white54
-                              : AppColors.textSecondary)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$learnedWords/10',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: learnedWords >= 10
-                              ? AppColors.success
-                              : (isDark ? Colors.white54 : null),
-                          fontSize: 11,
+                  if (isMastered && !isLocked)
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: isCompleted
+                              ? AppColors.secondary
+                              : AppColors.success,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Theme.of(context).cardColor,
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          isCompleted
+                              ? Icons.emoji_events
+                              : Icons.check,
+                          color: Colors.white,
+                          size: 12,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Icon(
-                        Icons.quiz_outlined,
-                        size: 14,
-                        color: bestScore >= 70
-                            ? AppColors.success
-                            : (isDark
-                            ? Colors.white54
-                            : AppColors.textSecondary),
+                    ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      module.name,
+                      style: AppTextStyles.h3.copyWith(
+                        color: isLocked
+                            ? (isDark ? Colors.white38 : Colors.grey)
+                            : (isDark ? Colors.white : null),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        bestScore > 0
-                            ? '${bestScore.toInt()}%'
-                            : 'Sin evaluar',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: bestScore >= 70
-                              ? AppColors.success
-                              : (isDark
-                              ? Colors.white54
-                              : AppColors.textSecondary),
-                          fontSize: 11,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      module.nameQuechua,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isLocked
+                            ? (isDark ? Colors.white12 : Colors.grey[400])
+                            : color,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (!isLocked) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.book_outlined,
+                              size: 14,
+                              color: learnedWords >= 10
+                                  ? AppColors.success
+                                  : (isDark
+                                  ? Colors.white54
+                                  : AppColors.textSecondary)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$learnedWords/10',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: learnedWords >= 10
+                                  ? AppColors.success
+                                  : (isDark ? Colors.white54 : null),
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Icon(
+                            Icons.quiz_outlined,
+                            size: 14,
+                            color: bestScore >= 70
+                                ? AppColors.success
+                                : (isDark
+                                ? Colors.white54
+                                : AppColors.textSecondary),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            bestScore > 0
+                                ? '${bestScore.toInt()}%'
+                                : 'Sin evaluar',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: bestScore >= 70
+                                  ? AppColors.success
+                                  : (isDark
+                                  ? Colors.white54
+                                  : AppColors.textSecondary),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: isDark
+                              ? Colors.white.withOpacity(0.1)
+                              : AppColors.progressBackground,
+                          valueColor:
+                          AlwaysStoppedAnimation<Color>(color),
+                          minHeight: 4,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: isDark
-                          ? Colors.white.withOpacity(0.1)
-                          : AppColors.progressBackground,
-                      valueColor:
-                      AlwaysStoppedAnimation<Color>(color),
-                      minHeight: 4,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Icon(
-              isCompleted
-                  ? Icons.emoji_events
-                  : Icons.arrow_forward_ios,
-              size: 20,
-              color: isCompleted
-                  ? AppColors.secondary
-                  : (isDark
-                  ? Colors.white38
-                  : AppColors.textSecondary),
-            ),
-          ],
+              Icon(
+                isLocked
+                    ? Icons.lock
+                    : isCompleted
+                    ? Icons.emoji_events
+                    : Icons.arrow_forward_ios,
+                size: 20,
+                color: isLocked
+                    ? (isDark ? Colors.white12 : Colors.grey[400])
+                    : isCompleted
+                    ? AppColors.secondary
+                    : (isDark
+                    ? Colors.white38
+                    : AppColors.textSecondary),
+              ),
+            ],
+          ),
         ),
       ),
     );
