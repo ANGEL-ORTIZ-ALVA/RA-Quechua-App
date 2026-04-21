@@ -35,24 +35,37 @@ class AchievementsHelper {
     int completedModules = 0;
     bool hasPerfectScore = false;
     int modulesWithPassingEval = 0;
+    int totalWords = 0;
 
     for (var module in modules) {
       final learned = await db.getLearnedWordsCount(module.id!);
+      final wordCount = await db.getTotalWordsInModule(module.id!);
       final bestScore = await db.getBestEvaluationScore(module.id!);
       final evals = await db.getEvaluationsByModule(module.id!);
 
       totalLearned += learned;
+      totalWords += wordCount;
       totalEvals += evals.length;
 
-      if (learned >= 5 && bestScore >= 70) masteredModules++;
-      if (learned >= 10 && bestScore >= 70) completedModules++;
+      // Módulo dominado: ≥50% palabras aprendidas + ≥70% evaluación
+      final halfWords = (wordCount / 2).ceil();
+      if (learned >= halfWords && bestScore >= 70) masteredModules++;
+
+      // Módulo completado: TODAS las palabras + ≥70% evaluación
+      if (learned >= wordCount && bestScore >= 70) completedModules++;
+
       if (bestScore >= 100) hasPerfectScore = true;
       if (bestScore >= 70) modulesWithPassingEval++;
     }
 
     final streakDays = prefs.getInt('streak_count') ?? 0;
 
+    // Conteo de evaluaciones por tipo (para logros de modalidades)
+    final evalCount10Plus = totalEvals >= 10;
+    final evalCount25Plus = totalEvals >= 25;
+
     return [
+      // ─── APRENDIZAJE ───
       Achievement(
         id: 'first_word',
         emoji: '🌱',
@@ -62,7 +75,7 @@ class AchievementsHelper {
         isUnlocked: totalLearned >= 1,
       ),
       Achievement(
-        id: 'half_vocab',
+        id: 'vocab_30',
         emoji: '📚',
         title: 'Estudiante Dedicado',
         description: 'Aprende 30 palabras',
@@ -70,13 +83,31 @@ class AchievementsHelper {
         isUnlocked: totalLearned >= 30,
       ),
       Achievement(
-        id: 'full_vocab',
-        emoji: '🎓',
-        title: 'Maestro del Vocabulario',
-        description: 'Aprende las 60 palabras',
+        id: 'vocab_60',
+        emoji: '📖',
+        title: 'Medio Vocabulario',
+        description: 'Aprende 60 palabras',
         category: 'Aprendizaje',
         isUnlocked: totalLearned >= 60,
       ),
+      Achievement(
+        id: 'vocab_100',
+        emoji: '🎓',
+        title: 'Maestro del Vocabulario',
+        description: 'Aprende 100 palabras',
+        category: 'Aprendizaje',
+        isUnlocked: totalLearned >= 100,
+      ),
+      Achievement(
+        id: 'vocab_all',
+        emoji: '🏅',
+        title: 'Enciclopedia Quechua',
+        description: 'Aprende las $totalWords palabras',
+        category: 'Aprendizaje',
+        isUnlocked: totalLearned >= totalWords && totalWords > 0,
+      ),
+
+      // ─── EVALUACIONES ───
       Achievement(
         id: 'first_eval',
         emoji: '✏️',
@@ -94,13 +125,31 @@ class AchievementsHelper {
         isUnlocked: hasPerfectScore,
       ),
       Achievement(
+        id: 'eval_10',
+        emoji: '🧪',
+        title: 'Practicante',
+        description: 'Completa 10 evaluaciones',
+        category: 'Evaluaciones',
+        isUnlocked: evalCount10Plus,
+      ),
+      Achievement(
+        id: 'eval_25',
+        emoji: '🔬',
+        title: 'Científico del Quechua',
+        description: 'Completa 25 evaluaciones',
+        category: 'Evaluaciones',
+        isUnlocked: evalCount25Plus,
+      ),
+      Achievement(
         id: 'all_modules_eval',
         emoji: '🏆',
         title: 'Evaluador Experto',
-        description: 'Aprueba evaluación en los 6 módulos',
+        description: 'Aprueba evaluación en los 12 módulos',
         category: 'Evaluaciones',
-        isUnlocked: modulesWithPassingEval >= 6,
+        isUnlocked: modulesWithPassingEval >= 12,
       ),
+
+      // ─── MÓDULOS ───
       Achievement(
         id: 'first_module',
         emoji: '⭐',
@@ -110,21 +159,31 @@ class AchievementsHelper {
         isUnlocked: completedModules >= 1,
       ),
       Achievement(
-        id: 'half_modules',
+        id: 'basic_level',
         emoji: '🌟',
-        title: 'Medio Camino',
-        description: 'Completa 3 módulos',
+        title: 'Nivel Básico',
+        description: 'Completa los 4 módulos básicos',
         category: 'Módulos',
-        isUnlocked: completedModules >= 3,
+        isUnlocked: completedModules >= 4,
+      ),
+      Achievement(
+        id: 'intermediate_level',
+        emoji: '💫',
+        title: 'Nivel Intermedio',
+        description: 'Completa 8 módulos',
+        category: 'Módulos',
+        isUnlocked: completedModules >= 8,
       ),
       Achievement(
         id: 'all_modules',
         emoji: '👑',
         title: 'Conquistador Total',
-        description: 'Completa los 6 módulos',
+        description: 'Completa los 12 módulos',
         category: 'Módulos',
-        isUnlocked: completedModules >= 6,
+        isUnlocked: completedModules >= 12,
       ),
+
+      // ─── CONSTANCIA ───
       Achievement(
         id: 'streak_3',
         emoji: '🔥',
@@ -160,8 +219,7 @@ class AchievementsHelper {
 
   static Future<void> checkAndNotify(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
-    final previouslyUnlocked =
-        prefs.getStringList('unlocked_achievements') ?? [];
+    final previouslyUnlocked = prefs.getStringList('unlocked_achievements') ?? [];
 
     final achievements = await getAchievements();
     final currentlyUnlocked = achievements
@@ -203,7 +261,6 @@ class AchievementsHelper {
       BuildContext context, Achievement achievement) async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Vibración de feedback
     HapticFeedback.mediumImpact();
 
     await showModalBottomSheet(
@@ -244,8 +301,7 @@ class AchievementsHelper {
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: AppColors.secondary
-                          .withOpacity(isDark ? 0.2 : 0.1),
+                      color: AppColors.secondary.withOpacity(isDark ? 0.2 : 0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Center(
@@ -279,9 +335,7 @@ class AchievementsHelper {
                         Text(
                           achievement.description,
                           style: AppTextStyles.bodySmall.copyWith(
-                            color: isDark
-                                ? Colors.white54
-                                : AppColors.textSecondary,
+                            color: isDark ? Colors.white54 : AppColors.textSecondary,
                             fontSize: 12,
                           ),
                         ),

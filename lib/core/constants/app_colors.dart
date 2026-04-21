@@ -33,6 +33,8 @@ class AppColors {
   static const Color progressFill = Color(0xFF4CAF50);
 
   // ─── COLORES POR MÓDULO (centralizado) ───
+  // IDs: 1=Animales, 2=Naturaleza, 3=Familia, 4=Números, 5=Saludos, 6=Colores,
+  //       7=Vocales, 8=Alfabeto, 9=Figuras, 10=Frases, 11=Oraciones
   static const List<Color> moduleColors = [
     Color(0xFFC62828), // 1 Animales     — rojo intenso
     Color(0xFF2E7D32), // 2 Naturaleza   — verde bosque
@@ -40,10 +42,15 @@ class AppColors {
     Color(0xFF1565C0), // 4 Números      — azul
     Color(0xFF6A1B9A), // 5 Saludos      — púrpura
     Color(0xFFAD1457), // 6 Colores      — rosa
+    Color(0xFFE65100), // 7 Vocales      — naranja intenso
+    Color(0xFF4527A0), // 8 Alfabeto     — índigo
+    Color(0xFF00695C), // 9 Figuras      — verde azulado
+    Color(0xFF37474F), // 10 Frases      — gris azulado
+    Color(0xFF880E4F), // 11 Oraciones   — magenta oscuro
+    Color(0xFF546E7A), // 12 Gramática   — gris azul slate
   ];
 
   /// Devuelve el color del módulo según su ID (1-based).
-  /// Usar SIEMPRE este método en vez de switch locales.
   static Color getModuleColor(int moduleId) {
     if (moduleId >= 1 && moduleId <= moduleColors.length) {
       return moduleColors[moduleId - 1];
@@ -66,6 +73,18 @@ class AppColors {
         return Icons.waving_hand;
       case 'palette':
         return Icons.palette;
+      case 'record_voice_over':
+        return Icons.record_voice_over;
+      case 'abc':
+        return Icons.abc;
+      case 'category':
+        return Icons.category;
+      case 'chat_bubble':
+        return Icons.chat_bubble_outline;
+      case 'menu_book':
+        return Icons.menu_book;
+      case 'rule':
+        return Icons.rule;
       default:
         return Icons.book;
     }
